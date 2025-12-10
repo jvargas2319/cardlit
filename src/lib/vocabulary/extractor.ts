@@ -181,7 +181,9 @@ export async function extractVocabularyFromText(
 
       // Aggregate validation stats from this chunk
       if (result.validationStats) {
-        totalValidated += result.validationStats.validated;
+        // validated = total - rejected (entries that passed validation)
+        const validated = result.validationStats.total - result.validationStats.rejected;
+        totalValidated += validated;
         totalRejected += result.validationStats.rejected;
         totalExactMatches += result.validationStats.exactMatches;
         totalFuzzyMatches += result.validationStats.fuzzyMatches;
@@ -248,7 +250,9 @@ export async function extractConceptsFromText(
 
       // Aggregate validation stats from this chunk
       if (result.validationStats) {
-        totalValidated += result.validationStats.validated;
+        // validated = total - rejected (entries that passed validation)
+        const validated = result.validationStats.total - result.validationStats.rejected;
+        totalValidated += validated;
         totalRejected += result.validationStats.rejected;
         totalExactMatches += result.validationStats.exactMatches;
         totalFuzzyMatches += result.validationStats.fuzzyMatches;
@@ -315,7 +319,9 @@ export async function extractVocabularyFromPages(
 
       // Aggregate validation stats from this chunk
       if (result.validationStats) {
-        totalValidated += result.validationStats.validated;
+        // validated = total - rejected (entries that passed validation)
+        const validated = result.validationStats.total - result.validationStats.rejected;
+        totalValidated += validated;
         totalRejected += result.validationStats.rejected;
         totalExactMatches += result.validationStats.exactMatches;
         totalFuzzyMatches += result.validationStats.fuzzyMatches;
@@ -382,7 +388,9 @@ export async function extractConceptsFromPages(
 
       // Aggregate validation stats from this chunk
       if (result.validationStats) {
-        totalValidated += result.validationStats.validated;
+        // validated = total - rejected (entries that passed validation)
+        const validated = result.validationStats.total - result.validationStats.rejected;
+        totalValidated += validated;
         totalRejected += result.validationStats.rejected;
         totalExactMatches += result.validationStats.exactMatches;
         totalFuzzyMatches += result.validationStats.fuzzyMatches;
