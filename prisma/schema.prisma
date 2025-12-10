@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  jobs         Job[]
+  subscription Subscription?
+  savedExports SavedExport[]
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id])
+  tier                 String    @default("free") // free, basic, pro, unlimited
+  stripeCustomerId     String?   @unique
+  stripeSubId          String?   @unique
+  status               String    @default("active") // active, canceled, past_due
+  currentPeriodStart   DateTime  @default(now())
+  currentPeriodEnd     DateTime?
+  pagesUsedThisPeriod  Int       @default(0)
+  exportsUsedThisPeriod Int      @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model Job {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+
+  fileName      String
+  fileType      String    // 'pdf' | 'epub'
+  fileSize      Int
+  totalPages    Int
+  blobUrl       String?   // Vercel Blob URL for uploaded file
+
+  status        String    @default("pending") // pending, processing, complete, failed
+  currentPhase  String?   // 'uploading', 'converting', 'ocr', 'extracting', 'complete'
+  pagesProcessed Int      @default(0)
+  vocabularyCount Int     @default(0)
+
+  // Extraction chunk progress tracking
+  currentChunk  Int?
+  totalChunks   Int?
+
+  // Extraction mode: 'language' for vocabulary or 'concept' for textbook concepts
+  extractionMode String   @default("language")
+
+  // Partial results stored as processing continues
+  extractedText  Json?    // Array of page texts (accumulated)
+  vocabulary     Json?    // Array of vocabulary entries (for language mode)
+  concepts       Json?    // Array of concept entries (for concept mode)
+
+  // Chapter detection results
+  chapters       Json?    // Array of detected Chapter objects
+
+  resultCsv     String?   // Final CSV content
+  error         String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+
+  savedExports  SavedExport[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model SavedExport {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  name      String   // User-provided or auto-generated name
+  type      String   // "csv_anki" | "csv_excel" | "flashcards_pdf"
+  fileUrl   String   // Vercel Blob URL
+  fileSize  Int      // Bytes
+  itemCount Int      // Number of vocabulary/concepts
+  expiresAt DateTime? // Null for unlimited tier (never expires)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
