@@ -91,9 +91,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const priceId = subscription.items.data[0]?.price.id;
   const tier = priceId ? getTierFromPriceId(priceId) : 'basic';
 
-  // Calculate period end
-  const periodEnd = subscription.current_period_end
-    ? new Date(subscription.current_period_end * 1000)
+  // Calculate period end - cast to any to handle Stripe SDK version differences
+  const subData = subscription as unknown as { current_period_end?: number; currentPeriodEnd?: number };
+  const periodEndTimestamp = subData.current_period_end || subData.currentPeriodEnd;
+  const periodEnd = periodEndTimestamp
+    ? new Date(periodEndTimestamp * 1000)
     : null;
 
   // Upsert subscription record
@@ -142,8 +144,18 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const targetUserId = existingSub?.userId || userId;
   if (!targetUserId) return;
 
-  const periodEnd = subscription.current_period_end
-    ? new Date(subscription.current_period_end * 1000)
+  // Cast to handle Stripe SDK version differences
+  const subData = subscription as unknown as {
+    current_period_end?: number;
+    currentPeriodEnd?: number;
+    current_period_start?: number;
+    currentPeriodStart?: number;
+  };
+  const periodEndTimestamp = subData.current_period_end || subData.currentPeriodEnd;
+  const periodStartTimestamp = subData.current_period_start || subData.currentPeriodStart;
+
+  const periodEnd = periodEndTimestamp
+    ? new Date(periodEndTimestamp * 1000)
     : null;
 
   await prisma.subscription.update({
@@ -153,8 +165,8 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       status,
       currentPeriodEnd: periodEnd,
       // Reset usage on renewal
-      ...(subscription.current_period_start && {
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
+      ...(periodStartTimestamp && {
+        currentPeriodStart: new Date(periodStartTimestamp * 1000),
         pagesUsedThisPeriod: 0,
         exportsUsedThisPeriod: 0,
       }),
@@ -189,7 +201,9 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const subscriptionId = invoice.subscription as string;
+  // Cast to handle Stripe SDK version differences
+  const invoiceData = invoice as unknown as { subscription?: string };
+  const subscriptionId = invoiceData.subscription;
 
   if (!subscriptionId) return;
 
