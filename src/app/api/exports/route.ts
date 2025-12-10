@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
     let _contentType: string;
 
     const isConceptMode = job.extractionMode === 'concept';
-    const vocabulary = (job.vocabulary as VocabularyEntry[]) || [];
-    const concepts = (job.concepts as ConceptEntry[]) || [];
+    const vocabulary = (job.vocabulary as unknown as VocabularyEntry[]) || [];
+    const concepts = (job.concepts as unknown as ConceptEntry[]) || [];
 
     if (type === 'csv_anki' || type === 'csv_excel') {
       // Generate CSV
