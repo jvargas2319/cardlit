@@ -41,7 +41,8 @@
       "Bash(timeout /t 2 /nobreak)",
       "Bash(powershell -Command:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
