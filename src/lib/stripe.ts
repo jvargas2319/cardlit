@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { TierName, isValidTier } from './subscription/tiers';
+import { TierName } from './subscription/tiers';
 
 // Server-side Stripe client
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {

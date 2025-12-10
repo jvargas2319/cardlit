@@ -125,13 +125,11 @@ export async function POST(request: NextRequest) {
     // Generate the export file
     let fileBuffer: Buffer;
     let fileName: string;
-    let contentType: string;
-    let itemCount: number;
+    let _contentType: string;
 
     const isConceptMode = job.extractionMode === 'concept';
     const vocabulary = (job.vocabulary as VocabularyEntry[]) || [];
     const concepts = (job.concepts as ConceptEntry[]) || [];
-    itemCount = isConceptMode ? concepts.length : vocabulary.length;
 
     if (type === 'csv_anki' || type === 'csv_excel') {
       // Generate CSV
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
       }
 
       fileName = `${job.fileName.replace(/\.[^/.]+$/, '')}_${type === 'csv_excel' ? 'excel' : 'anki'}.csv`;
-      contentType = 'text/csv';
+      _contentType = 'text/csv';
     } else {
       // Generate PDF flashcards
       if (isConceptMode) {
@@ -159,7 +157,7 @@ export async function POST(request: NextRequest) {
         fileBuffer = await generateFlashcardPdf(vocabulary);
       }
       fileName = `${job.fileName.replace(/\.[^/.]+$/, '')}_flashcards.pdf`;
-      contentType = 'application/pdf';
+      _contentType = 'application/pdf';
     }
 
     // Upload to blob storage

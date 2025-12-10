@@ -97,7 +97,7 @@ export default function UploadPage() {
       } else {
         alert(data.error || 'Failed to save export');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to save export');
     } finally {
       setSavingExport(null);

@@ -5,11 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { TIERS, TierName } from '@/lib/subscription/tiers';
 
-interface UserSubscription {
-  tier: TierName;
-  status: string;
-}
-
 export default function PricingPage() {
   const router = useRouter();
   const [currentTier, setCurrentTier] = useState<TierName | null>(null);
@@ -58,7 +53,7 @@ export default function PricingPage() {
       } else {
         alert(data.error || 'Failed to start checkout');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to start checkout');
     } finally {
       setLoading(null);
@@ -78,7 +73,7 @@ export default function PricingPage() {
       } else {
         alert(data.error || 'Failed to open subscription portal');
       }
-    } catch (error) {
+    } catch {
       alert('Failed to open subscription portal');
     }
   };
