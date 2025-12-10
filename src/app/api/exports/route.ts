@@ -160,6 +160,9 @@ export async function POST(request: NextRequest) {
       _contentType = 'application/pdf';
     }
 
+    // Silence unused variable warning
+    void _contentType;
+
     // Upload to blob storage
     const { url } = await uploadToBlob(fileBuffer, fileName);
 
