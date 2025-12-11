@@ -32,7 +32,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { startPage, endPage, languages = ['en'] } = body;
+    const { startPage, endPage, languages = ['ar', 'en'] } = body;  // Default to Arabic+English for multilingual support
 
     // Validate input
     if (!startPage || !endPage || startPage > endPage) {

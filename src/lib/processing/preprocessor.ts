@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import type { PreprocessOptions, PageImage } from '@/types';
 
 const DEFAULT_OPTIONS: PreprocessOptions = {
-  grayscale: true,
+  grayscale: false,  // Preserve color for better colored region detection (vocabulary boxes, tables)
   normalize: true,
   sharpen: true,
   threshold: undefined,

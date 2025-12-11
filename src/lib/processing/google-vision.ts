@@ -40,7 +40,8 @@ export class GoogleVisionOCR {
 
   constructor(options: { projectId?: string; languages?: string[] } = {}) {
     this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || 'vocab-extractor';
-    this.languages = options.languages || ['en'];
+    // Include Arabic + English for better multilingual OCR (Arabic, Chinese, etc.)
+    this.languages = options.languages || ['ar', 'en'];
   }
 
   async initialize(): Promise<void> {
@@ -280,7 +281,7 @@ export class GoogleVisionOCR {
 // Singleton instance for reuse
 let visionInstance: GoogleVisionOCR | null = null;
 
-export async function getVisionClient(languages: string[] = ['en']): Promise<GoogleVisionOCR> {
+export async function getVisionClient(languages: string[] = ['ar', 'en']): Promise<GoogleVisionOCR> {
   if (!visionInstance) {
     visionInstance = new GoogleVisionOCR({ languages });
     await visionInstance.initialize();
