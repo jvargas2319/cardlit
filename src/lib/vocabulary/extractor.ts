@@ -69,12 +69,14 @@ async function extractVocabularyFromChunk(
     }));
 
     // VALIDATION: Filter out hallucinated entries by checking against source text
+    // Use very lenient thresholds to handle OCR errors, especially for Arabic text
+    // with colored backgrounds (vocabulary boxes) and diacritic variations
     const { valid, rejected, stats } = validateExtractedVocabulary(
       rawVocabulary,
       chunk.text,
       {
-        fuzzyThreshold: 0.7,   // Allow for OCR errors
-        minMatchScore: 0.5,    // Be somewhat lenient given OCR quality
+        fuzzyThreshold: 0.5,   // Very lenient for OCR errors and diacritic variations
+        minMatchScore: 0.3,    // Accept more matches to capture all vocabulary
         logRejections: true,
       }
     );
@@ -121,12 +123,14 @@ async function extractConceptsFromChunk(
     }));
 
     // VALIDATION: Filter out hallucinated entries by checking against source text
+    // Use very lenient thresholds to handle OCR errors, especially for Arabic text
+    // with colored backgrounds (vocabulary boxes) and diacritic variations
     const { valid, rejected, stats } = validateExtractedConcepts(
       rawConcepts,
       chunk.text,
       {
-        fuzzyThreshold: 0.7,   // Allow for OCR errors
-        minMatchScore: 0.5,    // Be somewhat lenient given OCR quality
+        fuzzyThreshold: 0.5,   // Very lenient for OCR errors and diacritic variations
+        minMatchScore: 0.3,    // Accept more matches to capture all vocabulary
         logRejections: true,
       }
     );

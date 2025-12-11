@@ -89,6 +89,14 @@ export async function POST(
       const vision = await getVisionClient(languages);
       const ocrResults = await vision.processImagesBatch(processedImages);
 
+      // Debug: Log OCR output to help diagnose extraction issues
+      console.log('[OCR DEBUG] Extracted text from PDF pages:');
+      for (const result of ocrResults) {
+        console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
+        // Log first 300 chars to see what OCR captured (especially from colored regions)
+        console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
+      }
+
       // Convert to ExtractedPage format
       newPages = ocrResults.map(result => ({
         pageNumber: result.pageNumber,
@@ -121,6 +129,13 @@ export async function POST(
       // Run OCR
       const vision = await getVisionClient(languages);
       const ocrResults = await vision.processImagesBatch(processedImages);
+
+      // Debug: Log OCR output to help diagnose extraction issues
+      console.log('[OCR DEBUG] Extracted text from image:');
+      for (const result of ocrResults) {
+        console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
+        console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
+      }
 
       // Convert to ExtractedPage format
       newPages = ocrResults.map(result => ({

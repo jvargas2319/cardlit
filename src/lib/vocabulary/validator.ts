@@ -128,13 +128,19 @@ export function similarityScore(a: string, b: string): number {
 
 /**
  * Extract non-Latin tokens (Arabic, Chinese, Japanese, Korean, Cyrillic, etc.)
+ * Returns both normalized and original forms for better matching
  */
 function extractNonLatinTokens(text: string): string[] {
-  // Comprehensive regex for non-Latin scripts
-  const nonLatinRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0400-\u04FF\u0590-\u05FF\u0900-\u097F\u0980-\u09FF\u0E00-\u0E7F]+/g;
+  // Comprehensive regex for non-Latin scripts including Arabic Presentation Forms
+  const nonLatinRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0400-\u04FF\u0590-\u05FF\u0900-\u097F\u0980-\u09FF\u0E00-\u0E7F]+/g;
   const matches = text.match(nonLatinRegex) || [];
-  // Normalize and deduplicate
-  return [...new Set(matches.map(m => normalizeArabic(m)))];
+
+  // Return BOTH normalized and original forms for better matching
+  // This helps when OCR captures with/without diacritics differently than LLM extraction
+  const normalized = matches.map(m => normalizeArabic(m));
+  const original = matches;
+
+  return [...new Set([...normalized, ...original])];
 }
 
 /**
@@ -168,16 +174,27 @@ function normalizeArabic(text: string): string {
 
 /**
  * Normalize romanization for matching
+ * Preserves ayn marker (ʿ) as apostrophe for better matching with OCR variations
  */
 function normalizeRomanization(text: string): string {
   return text
     .toLowerCase()
-    // Remove common transliteration markers
-    .replace(/[''ʿʾ`]/g, '')
-    // Normalize common variations
+    // Normalize ayn representations (ʿ, 3, `, etc.) to apostrophe instead of removing
+    // This helps match "maʿa" with "ma'a" and similar OCR variations
+    .replace(/[''ʿʾ`3]/g, "'")
+    // Also handle OCR misread of ayn as 'g' - normalize 'g' before vowels in Arabic context
+    // e.g., "maga" → "ma'a" (common OCR error for مَعَ)
+    .replace(/g([aeiou])/g, "'$1")
+    // Normalize common romanization variations
     .replace(/aa/g, 'a')
     .replace(/ee/g, 'i')
     .replace(/oo/g, 'u')
+    // Normalize emphatic consonants
+    .replace(/[ḍḏ]/g, 'd')
+    .replace(/[ṣś]/g, 's')
+    .replace(/[ṭṯ]/g, 't')
+    .replace(/[żẓ]/g, 'z')
+    .replace(/[ḥḫ]/g, 'h')
     .trim();
 }
 
