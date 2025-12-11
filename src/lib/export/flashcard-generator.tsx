@@ -131,8 +131,7 @@ const vocabStyles = StyleSheet.create({
   },
   romanization: {
     fontSize: 9,
-    color: '#666',
-    fontStyle: 'italic',
+    color: '#888',
     marginTop: 4,
     textAlign: 'center',
   },
