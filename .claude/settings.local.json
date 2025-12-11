@@ -42,7 +42,8 @@
       "Bash(powershell -Command:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []

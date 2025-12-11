@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
-import { generateFlashcardHtml, generateConceptFlashcardHtml } from '@/lib/export/flashcard-generator';
+import { generateFlashcardPdf, generateConceptFlashcardPdf } from '@/lib/export/flashcard-generator';
 import type { VocabularyEntry, ConceptEntry, ExtractionMode } from '@/types';
-import puppeteer from 'puppeteer';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -16,8 +15,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let browser = null;
-
   try {
     const userId = await getAuthUser();
     if (!userId) {
@@ -58,7 +55,7 @@ export async function GET(
 
     // Get extraction mode
     const extractionMode = (job.extractionMode as ExtractionMode) || 'language';
-    let html: string;
+    let pdfBuffer: Buffer;
 
     if (extractionMode === 'concept') {
       // Concept mode - use concepts
@@ -71,7 +68,7 @@ export async function GET(
         );
       }
 
-      html = generateConceptFlashcardHtml(concepts);
+      pdfBuffer = await generateConceptFlashcardPdf(concepts);
     } else {
       // Language mode - use vocabulary
       const vocabulary = job.vocabulary as unknown as VocabularyEntry[] | null;
@@ -83,51 +80,15 @@ export async function GET(
         );
       }
 
-      html = generateFlashcardHtml(vocabulary);
+      pdfBuffer = await generateFlashcardPdf(vocabulary);
     }
-
-    // Launch Puppeteer and generate PDF
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
-
-    const page = await browser.newPage();
-
-    // Set content and wait for fonts to load
-    await page.setContent(html, {
-      waitUntil: 'networkidle0',
-    });
-
-    // Wait for fonts to be ready
-    await page.evaluateHandle('document.fonts.ready');
-
-    // Generate PDF
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
-      },
-    });
-
-    await browser.close();
-    browser = null;
 
     // Generate filename
     const baseName = job.fileName.replace(/\.(pdf|epub)$/i, '');
     const pdfFileName = `${baseName}_flashcards.pdf`;
 
     // Return PDF as download
-    return new NextResponse(Buffer.from(pdfBuffer), {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -136,14 +97,6 @@ export async function GET(
     });
   } catch (error) {
     console.error('Flashcard generation error:', error);
-
-    if (browser) {
-      try {
-        await browser.close();
-      } catch {
-        // Ignore close errors
-      }
-    }
 
     return NextResponse.json(
       { success: false, error: 'Failed to generate flashcards PDF' },
