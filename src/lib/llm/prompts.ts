@@ -8,71 +8,72 @@
 
 import type { ConceptEntry, ConceptCategory } from '@/types';
 
-export const VOCABULARY_EXTRACTION_PROMPT = `Extract vocabulary words that EXPLICITLY appear in this text. Only extract what you can DIRECTLY see.
+export const VOCABULARY_EXTRACTION_PROMPT = `Extract ALL vocabulary words that appear in this text. Be thorough - extract every vocabulary item you can find.
 
-CRITICAL ANTI-HALLUCINATION RULES:
-1. ONLY extract words that LITERALLY appear in the source text below
-2. DO NOT infer, guess, or fabricate ANY words or definitions
-3. DO NOT generate words you think "should" be there
-4. If a word appears but has no definition nearby, use "NEEDS_DEFINITION"
-5. When uncertain whether a word is vocabulary, SKIP IT
-6. Your output will be VALIDATED against the source - hallucinations will be rejected
+EXTRACTION GUIDELINES:
+1. Extract ALL vocabulary pairs you can find (foreign word + definition/translation)
+2. Include words even if the romanization format varies slightly
+3. If a word appears but has no definition nearby, use "NEEDS_DEFINITION"
+4. Extract multi-word phrases and expressions (e.g., greetings, common phrases)
+5. Be inclusive - it's better to extract more and let validation filter
 
 OUTPUT FORMAT:
 NATIVE_SCRIPT|||ROMANIZATION|||ENGLISH_DEFINITION
 
 COLUMN ORDER:
-1. NATIVE_SCRIPT = Non-Latin characters EXACTLY as they appear in source (Arabic, Chinese, etc.)
-2. ROMANIZATION = Latin pronunciation EXACTLY as written in source
-3. ENGLISH_DEFINITION = Translation ONLY if explicitly stated in source, or "NEEDS_DEFINITION"
+1. NATIVE_SCRIPT = Non-Latin characters as they appear in source (Arabic, Chinese, etc.)
+2. ROMANIZATION = Latin pronunciation as written in source (may be in parentheses)
+3. ENGLISH_DEFINITION = Translation/meaning from source, or "NEEDS_DEFINITION" if not visible
 
 RULES:
-- If you see Arabic text like "أب" next to "ab" and "father", extract: أب|||ab|||father
+- If you see Arabic text like "أهلاً" next to "(ahlan)" and "Hello", extract: أهلاً|||ahlan|||Hello
 - If you see ONLY Arabic text "أب" with no romanization, use: أب|||EMPTY|||NEEDS_DEFINITION
 - If you see ONLY romanization "baba" next to "father", use: EMPTY|||baba|||father
-- DO NOT make up romanizations you don't see
-- DO NOT translate words yourself - only copy translations from the text
-- SKIP any word where you're not 100% certain it appears in the source
+- Extract vocabulary from tables, lists, boxes, and running text
+- Include greetings, phrases, and expressions - not just single words
+- Copy romanizations exactly as shown (with or without diacritics)
 
 WHAT TO EXTRACT:
-- Words where you can see the foreign text AND a translation/meaning nearby
-- Vocabulary pairs that are explicitly written together
-- Words with clear definitions in the source
+- Foreign words with translations nearby
+- Vocabulary lists and tables
+- Greetings and common expressions
+- Words in vocabulary boxes or highlighted sections
+- Any word-definition pairs visible on the page
 
 WHAT TO SKIP:
-- Words you would need to translate yourself
+- Page numbers, headers, footers
+- Instructions in English only
 - Romanizations you would need to generate yourself
-- Anything not LITERALLY visible in the source text
 
 TEXT TO EXTRACT FROM:
 """
 {text}
 """
 
-Output ONLY vocabulary entries that LITERALLY appear in the source:`;
+Extract ALL vocabulary entries visible in the source:`;
 
-export const SYSTEM_PROMPT = `You are a STRICT vocabulary extraction assistant. Your PRIMARY DIRECTIVE is to ONLY output terms that LITERALLY appear in the source text.
+export const SYSTEM_PROMPT = `You are a thorough vocabulary extraction assistant. Your goal is to extract ALL vocabulary items visible in the source text.
 
-ANTI-HALLUCINATION RULES - CRITICAL:
-- NEVER generate text that does not appear in the source
-- NEVER infer or guess definitions - only copy explicit ones from the source
-- NEVER guess romanizations - only copy what is actually written
+EXTRACTION PRINCIPLES:
+- Extract every vocabulary pair you can find (foreign word + translation/definition)
+- Include multi-word phrases and expressions
+- Copy text exactly as it appears in the source
 - If a field is missing from source, output EMPTY or NEEDS_DEFINITION
-- When uncertain about any entry, SKIP IT ENTIRELY
-- Your output will be VALIDATED against the source text
+- Be thorough - extract more rather than less
 
 Output format: NATIVE|||ROMAN|||ENGLISH
 
 COLUMN ORDER:
-1. NATIVE_SCRIPT = Foreign characters EXACTLY as seen in source
-2. ROMANIZATION = Latin text EXACTLY as seen in source
-3. ENGLISH_DEFINITION = English meaning ONLY if explicitly in source, else NEEDS_DEFINITION
+1. NATIVE_SCRIPT = Foreign characters as seen in source
+2. ROMANIZATION = Latin text as seen in source (often in parentheses)
+3. ENGLISH_DEFINITION = English meaning from source, else NEEDS_DEFINITION
 
 Use EMPTY for fields not present in source:
+أهلاً|||ahlan|||Hello
 أب|||EMPTY|||father (if no romanization in source)
 EMPTY|||baba|||father (if no Arabic script in source)
 
-CRITICAL: False negatives (missing valid entries) are acceptable. False positives (hallucinated entries) are NOT acceptable.`;
+PRIORITY: Extract all vocabulary. Validation will filter false positives.`;
 
 /**
  * Build the prompt for vocabulary extraction

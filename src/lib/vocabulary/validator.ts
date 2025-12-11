@@ -59,10 +59,10 @@ export interface ValidationOptions {
 }
 
 const DEFAULT_OPTIONS: ValidationOptions = {
-  fuzzyThreshold: 0.75,
+  fuzzyThreshold: 0.6,      // More lenient for OCR variations
   requireNativeMatch: false,
   requireRomanMatch: false,
-  minMatchScore: 0.6,
+  minMatchScore: 0.4,       // Accept more matches to capture all vocabulary
   logRejections: true,
 };
 

@@ -6,24 +6,12 @@ import { getAuthUser } from '@/lib/auth';
  * Convert string to UTF-16LE with BOM
  * This encoding is the most reliable for Excel with Arabic/non-ASCII characters
  */
-function stringToUtf16LE(str: string): Uint8Array {
-  // UTF-16LE BOM: FF FE
-  const bom = new Uint8Array([0xFF, 0xFE]);
-
-  // Convert string to UTF-16LE (2 bytes per character)
-  const utf16 = new Uint8Array(str.length * 2);
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    utf16[i * 2] = code & 0xFF;           // Low byte
-    utf16[i * 2 + 1] = (code >> 8) & 0xFF; // High byte
-  }
-
-  // Combine BOM + content
-  const result = new Uint8Array(bom.length + utf16.length);
-  result.set(bom, 0);
-  result.set(utf16, bom.length);
-
-  return result;
+function stringToUtf16LE(str: string): Buffer {
+  // Use Node.js Buffer for proper UTF-16LE encoding
+  // This correctly handles all Unicode characters including Arabic
+  const bom = Buffer.from([0xFF, 0xFE]); // UTF-16LE BOM
+  const content = Buffer.from(str, 'utf16le');
+  return Buffer.concat([bom, content]);
 }
 
 /**
@@ -81,7 +69,7 @@ export async function GET(
     if (format === 'excel') {
       // UTF-16LE with BOM for Excel compatibility with Arabic/Chinese characters
       const csvBytes = stringToUtf16LE(job.resultCsv);
-      return new NextResponse(Buffer.from(csvBytes), {
+      return new NextResponse(new Uint8Array(csvBytes), {
         status: 200,
         headers: {
           'Content-Type': 'text/csv; charset=utf-16le',
