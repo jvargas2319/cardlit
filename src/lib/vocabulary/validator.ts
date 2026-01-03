@@ -59,10 +59,10 @@ export interface ValidationOptions {
 }
 
 const DEFAULT_OPTIONS: ValidationOptions = {
-  fuzzyThreshold: 0.6,      // More lenient for OCR variations
+  fuzzyThreshold: 0.4,      // Very lenient for OCR variations on colored backgrounds
   requireNativeMatch: false,
   requireRomanMatch: false,
-  minMatchScore: 0.4,       // Accept more matches to capture all vocabulary
+  minMatchScore: 0.15,      // Very low threshold - accept entries when any field matches
   logRejections: true,
 };
 
@@ -278,6 +278,8 @@ function findSubstringMatch(needle: string, source: string, threshold: number): 
 
 /**
  * Validate a single vocabulary entry against source text
+ * KEY CHANGE: Uses MAX score instead of average - accepts entry if EITHER native OR romanization matches
+ * This fixes the issue where OCR captures romanization but not Arabic from colored backgrounds
  */
 export function validateVocabularyEntry(
   entry: VocabularyEntry,
@@ -285,17 +287,30 @@ export function validateVocabularyEntry(
   options: ValidationOptions = DEFAULT_OPTIONS
 ): ValidationResult {
   const matches: SourceMatch[] = [];
-  let totalScore = 0;
-  let fieldCount = 0;
+  let nativeScore = 0;
+  let romanScore = 0;
 
   // Validate native script
   if (entry.nativeScript && entry.nativeScript !== 'EMPTY') {
     const normalizedNative = normalizeArabic(entry.nativeScript);
-    const nativeMatch = findBestMatch(
+    let nativeMatch = findBestMatch(
       normalizedNative,
       sourceTokens.nonLatinTokens,
       options.fuzzyThreshold
     );
+
+    // Fallback: try substring matching for multi-word phrases
+    // Token extraction splits "صباح الخير" into separate tokens, but the full phrase exists in source
+    if (nativeMatch.score === 0) {
+      const substringMatch = findSubstringMatch(
+        entry.nativeScript,
+        sourceTokens.original,
+        options.fuzzyThreshold
+      );
+      if (substringMatch.score > 0) {
+        nativeMatch = substringMatch;
+      }
+    }
 
     if (nativeMatch.score > 0) {
       matches.push({
@@ -304,21 +319,35 @@ export function validateVocabularyEntry(
         sourcePosition: sourceTokens.original.indexOf(nativeMatch.matchedToken),
         similarity: nativeMatch.score,
       });
-      totalScore += nativeMatch.score;
+      nativeScore = nativeMatch.score;
     } else if (options.requireNativeMatch) {
       return createInvalidResult(entry, matches);
     }
-    fieldCount++;
   }
 
   // Validate romanization
   if (entry.romanization && entry.romanization !== 'EMPTY') {
     const normalizedRoman = normalizeRomanization(entry.romanization);
-    const romanMatch = findBestMatch(
+    
+    // First try token matching
+    let romanMatch = findBestMatch(
       normalizedRoman,
       sourceTokens.latinTokens,
       options.fuzzyThreshold
     );
+
+    // Fallback: try substring matching for multi-word romanizations like "ahlan wa sahlan"
+    // This is crucial because OCR often captures romanization in parentheses even when Arabic fails
+    if (romanMatch.score < 0.5) {
+      const substringMatch = findSubstringMatch(
+        entry.romanization,
+        sourceTokens.original,
+        options.fuzzyThreshold
+      );
+      if (substringMatch.score > romanMatch.score) {
+        romanMatch = substringMatch;
+      }
+    }
 
     if (romanMatch.score > 0) {
       matches.push({
@@ -327,15 +356,14 @@ export function validateVocabularyEntry(
         sourcePosition: sourceTokens.original.toLowerCase().indexOf(romanMatch.matchedToken.toLowerCase()),
         similarity: romanMatch.score,
       });
-      totalScore += romanMatch.score;
+      romanScore = romanMatch.score;
     } else if (options.requireRomanMatch) {
       return createInvalidResult(entry, matches);
     }
-    fieldCount++;
   }
 
   // If no fields to validate, check the term field
-  if (fieldCount === 0 && entry.term) {
+  if (matches.length === 0 && entry.term) {
     const termMatch = findSubstringMatch(entry.term, sourceTokens.normalizedFull, options.fuzzyThreshold);
     if (termMatch.score > 0) {
       matches.push({
@@ -344,32 +372,31 @@ export function validateVocabularyEntry(
         sourcePosition: sourceTokens.normalizedFull.indexOf(termMatch.matchedToken.toLowerCase()),
         similarity: termMatch.score,
       });
-      totalScore = termMatch.score;
-      fieldCount = 1;
     }
   }
 
-  // Calculate average score
-  const avgScore = fieldCount > 0 ? totalScore / fieldCount : 0;
-  const isValid = avgScore >= options.minMatchScore && matches.length > 0;
+  // KEY CHANGE: Use MAX score instead of average
+  // This allows entries to pass when romanization matches even if native script doesn't
+  // (common when OCR struggles with Arabic on colored backgrounds)
+  const bestScore = Math.max(nativeScore, romanScore, ...matches.map(m => m.similarity));
+  const isValid = bestScore >= options.minMatchScore && matches.length > 0;
 
-  // Determine match type
+  // Determine match type based on best score
   let matchType: ValidationResult['matchType'] = 'not_found';
   if (matches.length > 0) {
-    const avgSimilarity = matches.reduce((sum, m) => sum + m.similarity, 0) / matches.length;
-    if (avgSimilarity >= 0.95) matchType = 'exact';
-    else if (avgSimilarity >= options.fuzzyThreshold) matchType = 'fuzzy';
+    if (bestScore >= 0.95) matchType = 'exact';
+    else if (bestScore >= options.fuzzyThreshold) matchType = 'fuzzy';
     else matchType = 'partial';
   }
 
   // Adjust confidence based on match quality
-  const adjustedConfidence = calculateAdjustedConfidence(entry.confidence, avgScore);
+  const adjustedConfidence = calculateAdjustedConfidence(entry.confidence, bestScore);
 
   return {
     entry,
     isValid,
     matchType,
-    matchScore: avgScore,
+    matchScore: bestScore,
     sourceMatches: matches,
     adjustedConfidence,
   };
@@ -377,6 +404,7 @@ export function validateVocabularyEntry(
 
 /**
  * Validate a single concept entry against source text
+ * KEY CHANGE: Try ALL match types and use the BEST score (same as vocabulary validation)
  */
 export function validateConceptEntry(
   entry: ConceptEntry,
@@ -384,10 +412,10 @@ export function validateConceptEntry(
   options: ValidationOptions = DEFAULT_OPTIONS
 ): ValidationResult {
   const matches: SourceMatch[] = [];
+  let bestScore = 0;
 
-  // Check if term appears in source
+  // Check if term appears in source as substring
   const termMatch = findSubstringMatch(entry.term, sourceTokens.normalizedFull, options.fuzzyThreshold);
-
   if (termMatch.score > 0) {
     matches.push({
       field: 'term',
@@ -395,59 +423,72 @@ export function validateConceptEntry(
       sourcePosition: sourceTokens.normalizedFull.indexOf(termMatch.matchedToken.toLowerCase()),
       similarity: termMatch.score,
     });
+    bestScore = Math.max(bestScore, termMatch.score);
   }
 
   // Also check in non-Latin tokens (for Arabic/foreign terms)
-  if (matches.length === 0) {
-    const nonLatinMatch = findBestMatch(
-      normalizeArabic(entry.term),
-      sourceTokens.nonLatinTokens,
-      options.fuzzyThreshold
-    );
-    if (nonLatinMatch.score > 0) {
-      matches.push({
-        field: 'term',
-        matchedText: nonLatinMatch.matchedToken,
-        sourcePosition: sourceTokens.original.indexOf(nonLatinMatch.matchedToken),
-        similarity: nonLatinMatch.score,
-      });
-    }
+  const nonLatinMatch = findBestMatch(
+    normalizeArabic(entry.term),
+    sourceTokens.nonLatinTokens,
+    options.fuzzyThreshold
+  );
+  if (nonLatinMatch.score > 0) {
+    matches.push({
+      field: 'term',
+      matchedText: nonLatinMatch.matchedToken,
+      sourcePosition: sourceTokens.original.indexOf(nonLatinMatch.matchedToken),
+      similarity: nonLatinMatch.score,
+    });
+    bestScore = Math.max(bestScore, nonLatinMatch.score);
   }
 
   // Also check in Latin tokens
-  if (matches.length === 0) {
-    const latinMatch = findBestMatch(
-      normalizeRomanization(entry.term),
-      sourceTokens.latinTokens,
-      options.fuzzyThreshold
-    );
-    if (latinMatch.score > 0) {
+  const latinMatch = findBestMatch(
+    normalizeRomanization(entry.term),
+    sourceTokens.latinTokens,
+    options.fuzzyThreshold
+  );
+  if (latinMatch.score > 0) {
+    matches.push({
+      field: 'term',
+      matchedText: latinMatch.matchedToken,
+      sourcePosition: sourceTokens.original.toLowerCase().indexOf(latinMatch.matchedToken.toLowerCase()),
+      similarity: latinMatch.score,
+    });
+    bestScore = Math.max(bestScore, latinMatch.score);
+  }
+
+  // Also try substring match on original text (for multi-word terms with special chars)
+  if (bestScore < 0.5) {
+    const originalMatch = findSubstringMatch(entry.term, sourceTokens.original, options.fuzzyThreshold);
+    if (originalMatch.score > bestScore) {
       matches.push({
         field: 'term',
-        matchedText: latinMatch.matchedToken,
-        sourcePosition: sourceTokens.original.toLowerCase().indexOf(latinMatch.matchedToken.toLowerCase()),
-        similarity: latinMatch.score,
+        matchedText: originalMatch.matchedToken,
+        sourcePosition: sourceTokens.original.indexOf(originalMatch.matchedToken),
+        similarity: originalMatch.score,
       });
+      bestScore = originalMatch.score;
     }
   }
 
-  const isValid = matches.length > 0 && matches[0].similarity >= options.minMatchScore;
-  const matchScore = matches.length > 0 ? matches[0].similarity : 0;
+  // KEY CHANGE: Use bestScore for validation (MAX logic)
+  const isValid = matches.length > 0 && bestScore >= options.minMatchScore;
 
   let matchType: ValidationResult['matchType'] = 'not_found';
   if (matches.length > 0) {
-    if (matchScore >= 0.95) matchType = 'exact';
-    else if (matchScore >= options.fuzzyThreshold) matchType = 'fuzzy';
+    if (bestScore >= 0.95) matchType = 'exact';
+    else if (bestScore >= options.fuzzyThreshold) matchType = 'fuzzy';
     else matchType = 'partial';
   }
 
-  const adjustedConfidence = calculateAdjustedConfidence(entry.confidence, matchScore);
+  const adjustedConfidence = calculateAdjustedConfidence(entry.confidence, bestScore);
 
   return {
     entry,
     isValid,
     matchType,
-    matchScore,
+    matchScore: bestScore,
     sourceMatches: matches,
     adjustedConfidence,
   };
@@ -468,9 +509,10 @@ function calculateAdjustedConfidence(
   original: 'high' | 'medium' | 'low',
   matchScore: number
 ): 'high' | 'medium' | 'low' {
-  // Downgrade confidence if match is poor
-  if (matchScore < 0.7) return 'low';
-  if (matchScore < 0.85) {
+  // Adjusted thresholds for more lenient validation
+  // We accept lower match scores now, so confidence adjustments should be less aggressive
+  if (matchScore < 0.3) return 'low';
+  if (matchScore < 0.5) {
     if (original === 'high') return 'medium';
     return original;
   }

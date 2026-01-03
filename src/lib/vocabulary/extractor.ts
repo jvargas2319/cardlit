@@ -69,14 +69,15 @@ async function extractVocabularyFromChunk(
     }));
 
     // VALIDATION: Filter out hallucinated entries by checking against source text
-    // Use very lenient thresholds to handle OCR errors, especially for Arabic text
+    // Use VERY lenient thresholds to handle OCR errors, especially for Arabic text
     // with colored backgrounds (vocabulary boxes) and diacritic variations
+    // KEY: Accept entry if EITHER native script OR romanization matches (MAX score logic)
     const { valid, rejected, stats } = validateExtractedVocabulary(
       rawVocabulary,
       chunk.text,
       {
-        fuzzyThreshold: 0.5,   // Very lenient for OCR errors and diacritic variations
-        minMatchScore: 0.3,    // Accept more matches to capture all vocabulary
+        fuzzyThreshold: 0.35,  // Very lenient for OCR errors and diacritic variations
+        minMatchScore: 0.15,   // Accept entries with low scores - MAX logic handles the rest
         logRejections: true,
       }
     );
@@ -123,14 +124,14 @@ async function extractConceptsFromChunk(
     }));
 
     // VALIDATION: Filter out hallucinated entries by checking against source text
-    // Use very lenient thresholds to handle OCR errors, especially for Arabic text
+    // Use VERY lenient thresholds to handle OCR errors, especially for Arabic text
     // with colored backgrounds (vocabulary boxes) and diacritic variations
     const { valid, rejected, stats } = validateExtractedConcepts(
       rawConcepts,
       chunk.text,
       {
-        fuzzyThreshold: 0.5,   // Very lenient for OCR errors and diacritic variations
-        minMatchScore: 0.3,    // Accept more matches to capture all vocabulary
+        fuzzyThreshold: 0.35,  // Very lenient for OCR errors and diacritic variations
+        minMatchScore: 0.15,   // Accept entries with low scores
         logRejections: true,
       }
     );
