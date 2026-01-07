@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { convertPdfFromUrlToImages } from '@/lib/processing/pdf-converter';
 import { preprocessImages } from '@/lib/processing/preprocessor';
-import { getVisionClient } from '@/lib/processing/google-vision';
+import { getVisionClient } from '@/lib/processing/openrouter-vision';
 import { extractTextFromEpubUrl } from '@/lib/processing/epub-extractor';
 import { downloadFromBlob } from '@/lib/storage/blob';
 import type { ExtractedPage, PageImage } from '@/types';
