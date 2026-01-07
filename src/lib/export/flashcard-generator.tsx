@@ -1,8 +1,22 @@
 /**
  * Flashcard PDF Generator
- * Generates PDFs for printable flashcards with Arabic/Chinese support
+ * Generates PDFs for printable flashcards with universal language support
  * Uses @react-pdf/renderer for serverless-compatible PDF generation
- * Supports:
+ * 
+ * Supported scripts:
+ * - Latin (default)
+ * - Arabic
+ * - Hebrew
+ * - Chinese (Simplified & Traditional)
+ * - Japanese
+ * - Korean
+ * - Thai
+ * - Devanagari (Hindi, Sanskrit, Nepali)
+ * - Bengali
+ * - Tamil
+ * - Greek & Cyrillic (via base Noto Sans)
+ * 
+ * Modes:
  * - Language mode: vocabulary with native script + romanization + definition
  * - Concept mode: technical terms with definition + category badge
  */
@@ -39,6 +53,36 @@ Font.register({
 Font.register({
   family: 'Noto Sans KR',
   src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuozeLTq8H4hfeE.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans Hebrew',
+  src: 'https://fonts.gstatic.com/s/notosanshebrew/v43/or3HQ7v33eiDljA1IufXTtVf7V6RvEEdhQlk0LlGxCyaeNKYZC0sqk3xXGiXd4qtpT5tBeqz.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans Thai',
+  src: 'https://fonts.gstatic.com/s/notosansthai/v24/iJWnBXeUZi_OHPqn4wq6hQ2_hbJ1xyN9wd43SofNWcd1MKVQt_So_9CdU5RspzF-QRvzzXg.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans Devanagari',
+  src: 'https://fonts.gstatic.com/s/notosansdevanagari/v25/TuGoUUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHn6B2OHjbL_08AlXQky-AzoFoW4Ow.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans Bengali',
+  src: 'https://fonts.gstatic.com/s/notosansbengali/v20/Cn-SJsCGWQxOjaGwMQ6fIiMywrNJIky6nvd8BjzVMvJx2mcSPVFpVEqE-6KmsolKudqg8mA.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans Tamil',
+  src: 'https://fonts.gstatic.com/s/notosanstamil/v27/ieVc2YdFI3GCY6SyQy1KfStzYKZgzN1z4LKDbeZce-0429tBManUktuex7vGo70RqKDt_EvT.ttf',
+});
+
+Font.register({
+  family: 'Noto Sans TC',
+  src: 'https://fonts.gstatic.com/s/notosanstc/v35/-nFuOG829Oofr2wohFbTp9ifNAn722rq0MXz76Cy_CpOtma3uNQ.ttf',
 });
 
 // Styles for vocabulary flashcards
@@ -140,6 +184,48 @@ const vocabStyles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     fontFamily: 'Noto Sans KR',
+  },
+  nativeHebrew: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans Hebrew',
+  },
+  nativeThai: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans Thai',
+  },
+  nativeDevanagari: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans Devanagari',
+  },
+  nativeBengali: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans Bengali',
+  },
+  nativeTamil: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans Tamil',
+  },
+  nativeTraditionalChinese: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans TC',
   },
   romanization: {
     fontSize: 9,
@@ -288,13 +374,58 @@ function containsKorean(text: string): boolean {
 }
 
 /**
+ * Check if text contains Hebrew characters
+ */
+function containsHebrew(text: string): boolean {
+  const hebrewPattern = /[\u0590-\u05FF]/;
+  return hebrewPattern.test(text);
+}
+
+/**
+ * Check if text contains Thai characters
+ */
+function containsThai(text: string): boolean {
+  const thaiPattern = /[\u0E00-\u0E7F]/;
+  return thaiPattern.test(text);
+}
+
+/**
+ * Check if text contains Devanagari characters (Hindi, Sanskrit, etc.)
+ */
+function containsDevanagari(text: string): boolean {
+  const devanagariPattern = /[\u0900-\u097F]/;
+  return devanagariPattern.test(text);
+}
+
+/**
+ * Check if text contains Bengali characters
+ */
+function containsBengali(text: string): boolean {
+  const bengaliPattern = /[\u0980-\u09FF]/;
+  return bengaliPattern.test(text);
+}
+
+/**
+ * Check if text contains Tamil characters
+ */
+function containsTamil(text: string): boolean {
+  const tamilPattern = /[\u0B80-\u0BFF]/;
+  return tamilPattern.test(text);
+}
+
+/**
  * Get the appropriate style for native script text
  */
 function getNativeStyle(text: string) {
   if (containsArabic(text)) return vocabStyles.nativeArabic;
-  if (containsChinese(text)) return vocabStyles.nativeChinese;
+  if (containsHebrew(text)) return vocabStyles.nativeHebrew;
   if (containsJapanese(text)) return vocabStyles.nativeJapanese;
   if (containsKorean(text)) return vocabStyles.nativeKorean;
+  if (containsChinese(text)) return vocabStyles.nativeChinese;
+  if (containsThai(text)) return vocabStyles.nativeThai;
+  if (containsDevanagari(text)) return vocabStyles.nativeDevanagari;
+  if (containsBengali(text)) return vocabStyles.nativeBengali;
+  if (containsTamil(text)) return vocabStyles.nativeTamil;
   return vocabStyles.native;
 }
 
