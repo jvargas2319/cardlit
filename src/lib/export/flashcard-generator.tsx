@@ -36,6 +36,11 @@ Font.register({
   src: 'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75s.ttf',
 });
 
+Font.register({
+  family: 'Noto Sans KR',
+  src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuozeLTq8H4hfeE.ttf',
+});
+
 // Styles for vocabulary flashcards
 const vocabStyles = StyleSheet.create({
   page: {
@@ -128,6 +133,13 @@ const vocabStyles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     fontFamily: 'Noto Sans JP',
+  },
+  nativeKorean: {
+    fontSize: 20,
+    fontWeight: 600,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans KR',
   },
   romanization: {
     fontSize: 9,
@@ -268,12 +280,21 @@ function containsJapanese(text: string): boolean {
 }
 
 /**
+ * Check if text contains Korean characters (Hangul)
+ */
+function containsKorean(text: string): boolean {
+  const koreanPattern = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/;
+  return koreanPattern.test(text);
+}
+
+/**
  * Get the appropriate style for native script text
  */
 function getNativeStyle(text: string) {
   if (containsArabic(text)) return vocabStyles.nativeArabic;
   if (containsChinese(text)) return vocabStyles.nativeChinese;
   if (containsJapanese(text)) return vocabStyles.nativeJapanese;
+  if (containsKorean(text)) return vocabStyles.nativeKorean;
   return vocabStyles.native;
 }
 
