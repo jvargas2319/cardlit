@@ -104,7 +104,7 @@ export function useProcessingFlow() {
     mode: ExtractionMode = 'language',
     languages: string[] = ['en']
   ): Promise<ProcessingResult | null> => {
-    const BATCH_SIZE = 3; // Reduced from 20 to fit within 60s timeout
+    const BATCH_SIZE = 2; // Reduced to 2 pages to ensure completion within 60s timeout
     const processStartTime = Date.now();
     const batchTimes: number[] = [];
 

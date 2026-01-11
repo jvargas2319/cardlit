@@ -462,19 +462,19 @@ interface VocabCardProps {
 const VocabCard: React.FC<VocabCardProps> = ({ entry, index }) => {
   const native = entry.nativeScript?.trim() || '';
   const romanization = entry.romanization?.trim() || '';
-  const definition = entry.definition || '';
+  const definition = entry.definition?.trim() || '—';
 
   return (
     <View style={vocabStyles.card}>
       <View style={vocabStyles.cardFront}>
-        {native && <Text style={getNativeStyle(native)}>{native}</Text>}
-        {romanization && <Text style={vocabStyles.romanization}>({romanization})</Text>}
+        {native ? <Text style={getNativeStyle(native)}>{native}</Text> : null}
+        {romanization ? <Text style={vocabStyles.romanization}>({romanization})</Text> : null}
       </View>
       <View style={vocabStyles.foldLine}>
         <Text style={vocabStyles.foldText}>fold here</Text>
       </View>
       <View style={vocabStyles.cardBack}>
-        <Text style={vocabStyles.definition}>{definition}</Text>
+        {definition ? <Text style={vocabStyles.definition}>{definition}</Text> : null}
       </View>
       <Text style={vocabStyles.cardNumber}>#{index + 1}</Text>
     </View>
@@ -534,27 +534,30 @@ interface ConceptCardProps {
 
 const ConceptCard: React.FC<ConceptCardProps> = ({ entry, index }) => {
   const colors = getCategoryColor(entry.category);
+  const term = entry.term?.trim() || '—';
+  const definition = entry.definition?.trim() || '—';
+  const category = entry.category?.trim() || '';
 
   return (
     <View style={conceptStyles.card}>
       <View style={conceptStyles.cardFront}>
-        <Text style={conceptStyles.term}>{entry.term}</Text>
-        {entry.category && (
+        {term ? <Text style={conceptStyles.term}>{term}</Text> : null}
+        {category ? (
           <Text
             style={[
               conceptStyles.categoryBadge,
               { backgroundColor: colors.bg, color: colors.text },
             ]}
           >
-            {entry.category}
+            {category}
           </Text>
-        )}
+        ) : null}
       </View>
       <View style={conceptStyles.foldLine}>
         <Text style={conceptStyles.foldText}>fold here</Text>
       </View>
       <View style={conceptStyles.cardBack}>
-        <Text style={conceptStyles.definition}>{entry.definition}</Text>
+        {definition ? <Text style={conceptStyles.definition}>{definition}</Text> : null}
       </View>
       <Text style={conceptStyles.cardNumber}>#{index + 1}</Text>
     </View>
