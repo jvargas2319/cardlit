@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { AuthForm } from '@/components/AuthForm';
+import { Logo } from '@/components/Logo';
 
 export default function RegisterPage() {
   return (
@@ -11,9 +12,9 @@ export default function RegisterPage() {
       <div className="relative z-10 w-full max-w-md space-y-8">
         <div className="glass-card rounded-2xl p-8 shadow-2xl">
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block mb-6">
-              <span className="text-xl font-bold text-white">Vocab Extractor</span>
-            </Link>
+            <div className="inline-block mb-6">
+              <Logo size="lg" />
+            </div>
             <h1 className="text-2xl font-bold text-white">Create your account</h1>
             <p className="mt-2 text-sm text-slate-400">
               Start extracting vocabulary from your books

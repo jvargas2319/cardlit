@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Logo } from '@/components/Logo';
 
 interface SavedExport {
   id: string;
@@ -131,7 +132,7 @@ export default function ExportsPage() {
       {/* Header */}
       <header className="bg-black/50 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-white">Vocab Extractor</h1>
+          <Logo size="md" />
           <div className="flex items-center gap-4">
             <Link
               href="/upload"

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from '@/components/Logo';
 
 export default function Home() {
   return (
@@ -11,7 +12,7 @@ export default function Home() {
       {/* Header */}
       <header className="relative z-10 py-6 px-4 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">Vocab Extractor</h1>
+          <Logo size="md" />
           <div className="space-x-4 flex items-center">
             <Link
               href="/login"
@@ -129,7 +130,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="relative z-10 py-8 border-t border-white/5 mt-24">
         <div className="max-w-6xl mx-auto px-4 text-center text-slate-500">
-          <p>Vocab Extractor - Extract vocabulary from books for Anki</p>
+          <p>Cardlit - Extract vocabulary from books for Anki</p>
         </div>
       </footer>
     </div>

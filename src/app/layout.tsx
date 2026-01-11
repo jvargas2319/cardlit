@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Vocab Extractor",
-  description: "Extract vocabulary from PDFs for language learning",
+  title: "Cardlit",
+  description: "Extract vocabulary from books and create flashcards for language learning",
 };
 
 export default function RootLayout({

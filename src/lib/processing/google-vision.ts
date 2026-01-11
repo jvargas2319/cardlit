@@ -39,7 +39,7 @@ export class GoogleVisionOCR {
   private useRestApi = false;
 
   constructor(options: { projectId?: string; languages?: string[] } = {}) {
-    this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || 'vocab-extractor';
+    this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || 'cardlit';
     // Include Arabic + English for better multilingual OCR (Arabic, Chinese, etc.)
     this.languages = options.languages || ['ar', 'en'];
   }

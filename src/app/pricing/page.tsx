@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { TIERS, TierName } from '@/lib/subscription/tiers';
+import { Logo } from '@/components/Logo';
 
 export default function PricingPage() {
   const router = useRouter();
@@ -95,9 +96,7 @@ export default function PricingPage() {
       {/* Header */}
       <header className="relative z-10 py-6 px-4 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-white">
-            Vocab Extractor
-          </Link>
+          <Logo size="md" />
           <div className="space-x-4 flex items-center">
             {isLoggedIn ? (
               <Link
@@ -255,8 +254,8 @@ export default function PricingPage() {
         <div className="mt-16 text-center">
           <p className="text-slate-400">
             Questions? Contact us at{' '}
-            <a href="mailto:support@vocabextractor.com" className="text-indigo-400 hover:text-indigo-300">
-              support@vocabextractor.com
+            <a href="mailto:support@cardlit.com" className="text-indigo-400 hover:text-indigo-300">
+              support@cardlit.com
             </a>
           </p>
         </div>
@@ -265,7 +264,7 @@ export default function PricingPage() {
       {/* Footer */}
       <footer className="relative z-10 py-8 border-t border-white/5 mt-16">
         <div className="max-w-6xl mx-auto px-4 text-center text-slate-500">
-          <p>Vocab Extractor - Extract vocabulary from books for Anki</p>
+          <p>Cardlit - Extract vocabulary from books for Anki</p>
         </div>
       </footer>
     </div>

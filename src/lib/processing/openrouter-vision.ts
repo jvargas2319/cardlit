@@ -141,8 +141,8 @@ export class OpenRouterVisionOCR {
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://vocab-extractor.app',
-          'X-Title': 'Vocabulary Extractor OCR',
+          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://cardlit.com',
+          'X-Title': 'Cardlit OCR',
         },
         body: JSON.stringify({
           model: this.config.model,
