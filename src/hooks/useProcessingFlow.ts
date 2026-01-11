@@ -15,6 +15,59 @@ function formatDuration(ms: number): string {
   return `${mins}m ${secs}s`;
 }
 
+/**
+ * Fetch with timeout and retry logic for handling long-running OCR requests
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  { maxRetries = 2, timeoutMs = 55000 }: { maxRetries?: number; timeoutMs?: number } = {}
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // If we get a 504 or 502, retry
+      if (response.status === 504 || response.status === 502) {
+        lastError = new Error(`Server timeout (${response.status})`);
+        if (attempt < maxRetries) {
+          console.log(`Retrying request (attempt ${attempt + 2}/${maxRetries + 1})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+          continue;
+        }
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      // If aborted due to timeout, retry
+      if (lastError.name === 'AbortError' && attempt < maxRetries) {
+        console.log(`Request timed out, retrying (attempt ${attempt + 2}/${maxRetries + 1})...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+
+      // For other errors, don't retry
+      if (lastError.name !== 'AbortError') {
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError || new Error('Request failed after retries');
+}
+
 interface ProcessingState {
   phase: 'idle' | 'uploading' | 'ocr' | 'extracting' | 'finalizing' | 'complete' | 'error';
   progress: number;
@@ -51,7 +104,7 @@ export function useProcessingFlow() {
     mode: ExtractionMode = 'language',
     languages: string[] = ['en']
   ): Promise<ProcessingResult | null> => {
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 3; // Reduced from 20 to fit within 60s timeout
     const processStartTime = Date.now();
     const batchTimes: number[] = [];
 
@@ -128,11 +181,21 @@ export function useProcessingFlow() {
           estimatedTimeRemaining,
         }));
 
-        const processResponse = await fetch(`/api/jobs/${jobId}/process`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ startPage: start, endPage: end, languages }),
-        });
+        const processResponse = await fetchWithRetry(
+          `/api/jobs/${jobId}/process`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ startPage: start, endPage: end, languages }),
+          },
+          { maxRetries: 2, timeoutMs: 55000 }
+        );
+
+        // Check if response is JSON (timeout errors return HTML)
+        const contentType = processResponse.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          throw new Error('Server timeout - please try again with a smaller file');
+        }
 
         const processData = await processResponse.json();
 
