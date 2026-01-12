@@ -34,7 +34,33 @@ export default function UploadPage() {
   const [exportUsage, setExportUsage] = useState<ExportUsage | null>(null);
   const [savingExport, setSavingExport] = useState<SavedExportType | null>(null);
   const [savedExports, setSavedExports] = useState<SavedExportType[]>([]);
+  const [downloadingType, setDownloadingType] = useState<'anki' | 'excel' | 'flashcards' | null>(null);
   const { state, processFile, reset, downloadCsv, downloadFlashcards, isProcessing, isComplete, hasError } = useProcessingFlow();
+
+  // Wrapper for download with loading state
+  const handleDownloadCsv = async (format: 'anki' | 'excel') => {
+    setDownloadingType(format);
+    try {
+      await downloadCsv(format);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Download failed. Please try again.');
+    } finally {
+      setDownloadingType(null);
+    }
+  };
+
+  const handleDownloadFlashcards = async () => {
+    setDownloadingType('flashcards');
+    try {
+      await downloadFlashcards();
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Download failed. Please try again.');
+    } finally {
+      setDownloadingType(null);
+    }
+  };
 
   // Fetch usage on mount
   useEffect(() => {
@@ -277,22 +303,55 @@ export default function UploadPage() {
                 {/* Download buttons */}
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => downloadCsv('anki')}
-                    className="px-5 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-500/20"
+                    onClick={() => handleDownloadCsv('anki')}
+                    disabled={downloadingType !== null}
+                    className="px-5 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
                   >
-                    Download for Anki
+                    {downloadingType === 'anki' ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Preparing...
+                      </>
+                    ) : (
+                      'Download for Anki'
+                    )}
                   </button>
                   <button
-                    onClick={() => downloadCsv('excel')}
-                    className="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20"
+                    onClick={() => handleDownloadCsv('excel')}
+                    disabled={downloadingType !== null}
+                    className="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
                   >
-                    Download for Excel
+                    {downloadingType === 'excel' ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Preparing...
+                      </>
+                    ) : (
+                      'Download for Excel'
+                    )}
                   </button>
                   <button
-                    onClick={downloadFlashcards}
-                    className="px-5 py-2.5 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-500 transition-colors shadow-lg shadow-purple-500/20"
+                    onClick={handleDownloadFlashcards}
+                    disabled={downloadingType !== null}
+                    className="px-5 py-2.5 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-500 transition-colors shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
                   >
-                    Download Flashcards PDF
+                    {downloadingType === 'flashcards' ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Preparing PDF...
+                      </>
+                    ) : (
+                      'Download Flashcards PDF'
+                    )}
                   </button>
                 </div>
 
