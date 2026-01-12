@@ -42,8 +42,9 @@ export interface ExtractionResult {
 /**
  * Extract vocabulary from a single text chunk (language mode)
  * Includes source text validation to filter out hallucinations
+ * Exported for use by extract-chunk endpoint
  */
-async function extractVocabularyFromChunk(
+export async function extractVocabularyFromChunk(
   chunk: TextChunk,
   totalChunks: number
 ): Promise<{ vocabulary: VocabularyEntry[]; error?: string; validationStats?: ValidationStats }> {
@@ -97,8 +98,9 @@ async function extractVocabularyFromChunk(
 /**
  * Extract concepts from a single text chunk (concept mode)
  * Includes source text validation to filter out hallucinations
+ * Exported for use by extract-chunk endpoint
  */
-async function extractConceptsFromChunk(
+export async function extractConceptsFromChunk(
   chunk: TextChunk,
   totalChunks: number
 ): Promise<{ concepts: ConceptEntry[]; error?: string; validationStats?: ValidationStats }> {

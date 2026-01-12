@@ -218,16 +218,16 @@ export function useProcessingFlow() {
         elapsedTime: Date.now() - processStartTime,
       }));
 
-      // Phase 3: Extract vocabulary/concepts
-      const extractingMessage = mode === 'concept'
-        ? 'Extracting key concepts with AI...'
-        : 'Extracting vocabulary with AI...';
+      // Phase 3: Extract vocabulary/concepts in batches
+      const extractLabel = mode === 'concept' ? 'concepts' : 'vocabulary';
+      
+      // First, get the total number of chunks
       setState(prev => ({
         ...prev,
         phase: 'extracting',
         progress: 0,
         total: 1,
-        message: extractingMessage,
+        message: `Preparing to extract ${extractLabel}...`,
         elapsedTime: Date.now() - processStartTime,
         currentBatch: undefined,
         totalBatches: undefined,
@@ -235,53 +235,77 @@ export function useProcessingFlow() {
         estimatedTimeRemaining: undefined,
       }));
 
-      // Start extraction request
-      const extractPromise = fetch(`/api/jobs/${jobId}/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode }),
-      });
+      const chunksResponse = await fetch(`/api/jobs/${jobId}/chunks`);
+      const chunksData = await chunksResponse.json();
 
-      // Poll for extraction progress while waiting
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusResponse = await fetch(`/api/jobs/${jobId}/status`);
-          const statusData = await statusResponse.json();
+      if (!chunksData.success) {
+        throw new Error(chunksData.error || 'Failed to get chunk count');
+      }
 
-          if (statusData.success && statusData.data.currentChunk && statusData.data.totalChunks) {
-            const { currentChunk, totalChunks } = statusData.data;
-            const extractLabel = mode === 'concept' ? 'concepts' : 'vocabulary';
-            setState(prev => ({
-              ...prev,
-              progress: currentChunk,
-              total: totalChunks,
-              message: `Extracting ${extractLabel}: chunk ${currentChunk} of ${totalChunks}...`,
-              elapsedTime: Date.now() - processStartTime,
-              currentBatch: currentChunk,
-              totalBatches: totalChunks,
-            }));
-          }
-        } catch {
-          // Ignore polling errors
+      const totalChunks = chunksData.data.totalChunks;
+      const extractionChunkTimes: number[] = [];
+      let totalEntriesFound = 0;
+
+      // Process each chunk
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const elapsedTime = Date.now() - processStartTime;
+
+        // Calculate estimated time remaining
+        const avgChunkTime = extractionChunkTimes.length > 0
+          ? extractionChunkTimes.reduce((a, b) => a + b, 0) / extractionChunkTimes.length
+          : 0;
+        const remainingChunks = totalChunks - chunkIndex;
+        const estimatedTimeRemaining = avgChunkTime > 0 ? avgChunkTime * remainingChunks : undefined;
+
+        setState(prev => ({
+          ...prev,
+          phase: 'extracting',
+          progress: chunkIndex,
+          total: totalChunks,
+          message: `Extracting ${extractLabel}: chunk ${chunkIndex + 1} of ${totalChunks}...`,
+          elapsedTime,
+          currentBatch: chunkIndex + 1,
+          totalBatches: totalChunks,
+          lastBatchTime: extractionChunkTimes.length > 0 ? extractionChunkTimes[extractionChunkTimes.length - 1] : undefined,
+          estimatedTimeRemaining,
+        }));
+
+        const chunkResponse = await fetchWithRetry(
+          `/api/jobs/${jobId}/extract-chunk`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chunkIndex }),
+          },
+          { maxRetries: 2, timeoutMs: 55000 }
+        );
+
+        // Check if response is JSON
+        const contentType = chunkResponse.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          throw new Error('Server timeout during extraction - please try again');
         }
-      }, 2000);
 
-      const extractResponse = await extractPromise;
-      clearInterval(pollInterval);
+        const chunkData = await chunkResponse.json();
 
-      const extractData = await extractResponse.json();
+        if (!chunkData.success) {
+          throw new Error(chunkData.error || `Failed to extract chunk ${chunkIndex + 1}`);
+        }
 
-      if (!extractData.success) {
-        throw new Error(extractData.error || 'Failed to extract content');
+        // Track timing and entries
+        if (chunkData.data?.chunkTimeMs) {
+          extractionChunkTimes.push(chunkData.data.chunkTimeMs);
+        }
+        totalEntriesFound = chunkData.data?.totalEntries || totalEntriesFound;
       }
 
       const foundLabel = mode === 'concept' ? 'concept' : 'vocabulary';
       setState(prev => ({
         ...prev,
         phase: 'extracting',
-        progress: 1,
-        total: 1,
-        message: `Found ${extractData.data.vocabularyCount} ${foundLabel} entries`,
+        progress: totalChunks,
+        total: totalChunks,
+        message: `Found ${totalEntriesFound} ${foundLabel} entries`,
         elapsedTime: Date.now() - processStartTime,
       }));
 
