@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { convertPdfFromUrlToImages } from '@/lib/processing/pdf-converter';
 import { preprocessImages } from '@/lib/processing/preprocessor';
@@ -43,9 +43,9 @@ export async function POST(
     }
 
     // Get job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -62,13 +62,13 @@ export async function POST(
     }
 
     // Update job status
-    await prisma.job.update({
+    await withRetry(() => prisma.job.update({
       where: { id },
       data: {
         status: 'processing',
         currentPhase: 'ocr',
       },
-    });
+    }));
 
     // Start timing this batch
     const batchStartTime = Date.now();
@@ -165,14 +165,14 @@ export async function POST(
     console.log(`[PROCESS] Job ${id} - OCR Batch ${currentBatch}/${totalBatches} (pages ${startPage}-${endPage}) completed in ${(batchTimeMs / 1000).toFixed(1)}s (${avgPageTimeMs}ms/page)`);
 
     // Update job with new text
-    await prisma.job.update({
+    await withRetry(() => prisma.job.update({
       where: { id },
       data: {
         extractedText: updatedText as unknown as Prisma.InputJsonValue,
         pagesProcessed,
         currentPhase: pagesProcessed >= job.totalPages ? 'ocr_complete' : 'ocr',
       },
-    });
+    }));
 
     return NextResponse.json({
       success: true,
@@ -194,13 +194,13 @@ export async function POST(
     // Try to update job with error status
     try {
       const { id } = await params;
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           status: 'failed',
           error: error instanceof Error ? error.message : 'Processing failed',
         },
-      });
+      }));
     } catch {
       // Ignore update errors
     }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { deduplicateVocabulary, deduplicateConcepts } from '@/lib/vocabulary/deduplicator';
 import { detectChapters, assignVocabularyToChapters } from '@/lib/vocabulary/chapter-detector';
@@ -35,9 +35,9 @@ export async function POST(
     const { id } = await params;
 
     // Get job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -50,12 +50,12 @@ export async function POST(
     const extractionMode = (job.extractionMode as ExtractionMode) || 'language';
 
     // Update job status
-    await prisma.job.update({
+    await withRetry(() => prisma.job.update({
       where: { id },
       data: {
         currentPhase: 'finalizing',
       },
-    });
+    }));
 
     // Start timing finalization
     const finalizeStartTime = Date.now();
@@ -87,7 +87,7 @@ export async function POST(
       }
 
       // Update job with final results
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           concepts: deduplicated as unknown as Prisma.InputJsonValue,
@@ -98,7 +98,7 @@ export async function POST(
           completedAt: new Date(),
           blobUrl: null,
         },
-      });
+      }));
     } else {
       // Language mode
       const vocabulary = job.vocabulary as unknown as VocabularyEntry[] | null;
@@ -137,7 +137,7 @@ export async function POST(
       }
 
       // Update job with final results
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           vocabulary: deduplicated as unknown as Prisma.InputJsonValue,
@@ -149,7 +149,7 @@ export async function POST(
           completedAt: new Date(),
           blobUrl: null,
         },
-      });
+      }));
     }
 
     // Calculate finalization timing
@@ -181,13 +181,13 @@ export async function POST(
     // Try to update job with error status
     try {
       const { id } = await params;
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           status: 'failed',
           error: error instanceof Error ? error.message : 'Finalization failed',
         },
-      });
+      }));
     } catch {
       // Ignore update errors
     }

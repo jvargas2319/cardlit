@@ -2,7 +2,7 @@
  * Export saving limits and usage tracking
  */
 
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getExportLimit, getExportStorageDays, isValidTier, TierName, canSaveExports } from './tiers';
 
 export interface ExportUsageResult {
@@ -19,9 +19,9 @@ export interface ExportUsageResult {
  * Get user's export usage for the current period
  */
 export async function getExportUsage(userId: string): Promise<ExportUsageResult> {
-  const subscription = await prisma.subscription.findUnique({
+  const subscription = await withRetry(() => prisma.subscription.findUnique({
     where: { userId },
-  });
+  }));
 
   const tier: TierName = subscription?.tier && isValidTier(subscription.tier)
     ? subscription.tier as TierName
@@ -79,7 +79,7 @@ export async function canUserSaveExport(userId: string): Promise<{
  * Record that an export was saved (increment counter)
  */
 export async function recordExportSaved(userId: string): Promise<void> {
-  await prisma.subscription.upsert({
+  await withRetry(() => prisma.subscription.upsert({
     where: { userId },
     update: {
       exportsUsedThisPeriod: { increment: 1 },
@@ -89,7 +89,7 @@ export async function recordExportSaved(userId: string): Promise<void> {
       tier: 'free',
       exportsUsedThisPeriod: 1,
     },
-  });
+  }));
 }
 
 /**
@@ -117,14 +117,14 @@ export function calculateExpirationDate(tier: TierName): Date | null {
  * Called by cron job at the start of each billing period
  */
 export async function resetMonthlyExportUsage(): Promise<number> {
-  const result = await prisma.subscription.updateMany({
+  const result = await withRetry(() => prisma.subscription.updateMany({
     where: {
       status: 'active',
     },
     data: {
       exportsUsedThisPeriod: 0,
     },
-  });
+  }));
 
   return result.count;
 }

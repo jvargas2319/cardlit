@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { createPortalSession } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's subscription with Stripe customer ID
-    const subscription = await prisma.subscription.findUnique({
+    const subscription = await withRetry(() => prisma.subscription.findUnique({
       where: { userId },
-    });
+    }));
 
     if (!subscription?.stripeCustomerId) {
       return NextResponse.json(

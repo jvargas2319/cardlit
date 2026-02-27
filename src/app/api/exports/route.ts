@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { uploadToBlob } from '@/lib/storage/blob';
 import { canUserSaveExport, recordExportSaved, calculateExpirationDate, getExportUsage } from '@/lib/subscription/exports';
 import { isValidTier, TierName } from '@/lib/subscription/tiers';
@@ -19,7 +19,7 @@ export async function GET() {
       );
     }
 
-    const exports = await prisma.savedExport.findMany({
+    const exports = await withRetry(() => prisma.savedExport.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -30,7 +30,7 @@ export async function GET() {
           },
         },
       },
-    });
+    }));
 
     const usage = await getExportUsage(userId);
 
@@ -104,9 +104,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id: jobId, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -168,9 +168,9 @@ export async function POST(request: NextRequest) {
     const { url } = await uploadToBlob(fileBuffer, fileName);
 
     // Get user's tier for expiration calculation
-    const subscription = await prisma.subscription.findUnique({
+    const subscription = await withRetry(() => prisma.subscription.findUnique({
       where: { userId },
-    });
+    }));
     const tier: TierName = subscription?.tier && isValidTier(subscription.tier)
       ? subscription.tier as TierName
       : 'free';
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
     // Create the saved export record
     const exportName = name || `${job.fileName} - ${type === 'flashcards_pdf' ? 'Flashcards' : type === 'csv_anki' ? 'Anki CSV' : 'Excel CSV'}`;
 
-    const savedExport = await prisma.savedExport.create({
+    const savedExport = await withRetry(() => prisma.savedExport.create({
       data: {
         userId,
         jobId,
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
         itemCount,
         expiresAt,
       },
-    });
+    }));
 
     // Record the export usage
     await recordExportSaved(userId);

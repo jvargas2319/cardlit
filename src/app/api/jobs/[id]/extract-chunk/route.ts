@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { chunkPageTexts } from '@/lib/vocabulary/chunker';
 import { extractVocabularyFromChunk, extractConceptsFromChunk } from '@/lib/vocabulary/extractor';
@@ -40,9 +40,9 @@ export async function POST(
     }
 
     // Get job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -75,7 +75,7 @@ export async function POST(
     const extractionMode = (job.extractionMode as ExtractionMode) || 'language';
 
     // Update job status
-    await prisma.job.update({
+    await withRetry(() => prisma.job.update({
       where: { id },
       data: {
         status: 'processing',
@@ -83,7 +83,7 @@ export async function POST(
         currentChunk: chunkIndex + 1,
         totalChunks,
       },
-    });
+    }));
 
     // Start timing
     const startTime = Date.now();
@@ -118,14 +118,14 @@ export async function POST(
       // Deduplicate on the fly
       const deduplicated = deduplicateConcepts(allConcepts);
 
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           concepts: deduplicated as unknown as Prisma.InputJsonValue,
           vocabularyCount: deduplicated.length,
           currentPhase: chunkIndex + 1 >= totalChunks ? 'extraction_complete' : 'extracting',
         },
-      });
+      }));
 
       return NextResponse.json({
         success: true,
@@ -146,14 +146,14 @@ export async function POST(
       // Deduplicate on the fly
       const deduplicated = deduplicateVocabulary(allVocabulary);
 
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           vocabulary: deduplicated as unknown as Prisma.InputJsonValue,
           vocabularyCount: deduplicated.length,
           currentPhase: chunkIndex + 1 >= totalChunks ? 'extraction_complete' : 'extracting',
         },
-      });
+      }));
 
       return NextResponse.json({
         success: true,
@@ -174,13 +174,13 @@ export async function POST(
     // Try to update job with error status
     try {
       const { id } = await params;
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           status: 'failed',
           error: error instanceof Error ? error.message : 'Chunk extraction failed',
         },
-      });
+      }));
     } catch {
       // Ignore update errors
     }

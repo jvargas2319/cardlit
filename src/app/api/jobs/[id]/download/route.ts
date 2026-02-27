@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
 /**
@@ -34,7 +34,7 @@ export async function GET(
     const { id } = await params;
 
     // Get job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
       select: {
         id: true,
@@ -42,7 +42,7 @@ export async function GET(
         status: true,
         resultCsv: true,
       },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(

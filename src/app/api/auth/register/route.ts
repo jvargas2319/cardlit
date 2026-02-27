@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { hashPassword, createToken, setAuthCookie } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -23,9 +23,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await withRetry(() => prisma.user.findUnique({
       where: { email: email.toLowerCase() },
-    });
+    }));
 
     if (existingUser) {
       return NextResponse.json(
@@ -36,12 +36,12 @@ export async function POST(request: NextRequest) {
 
     // Create user
     const passwordHash = await hashPassword(password);
-    const user = await prisma.user.create({
+    const user = await withRetry(() => prisma.user.create({
       data: {
         email: email.toLowerCase(),
         passwordHash,
       },
-    });
+    }));
 
     // Create token and set cookie
     const token = await createToken(user.id);

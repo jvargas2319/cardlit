@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { generateFlashcardPdf, generateConceptFlashcardPdf } from '@/lib/export/flashcard-generator';
 import type { VocabularyEntry, ConceptEntry, ExtractionMode } from '@/types';
@@ -27,7 +27,7 @@ export async function GET(
     const { id } = await params;
 
     // Get job with vocabulary/concepts
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
       select: {
         id: true,
@@ -37,7 +37,7 @@ export async function GET(
         concepts: true,
         extractionMode: true,
       },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(

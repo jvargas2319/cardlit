@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { downloadFromBlob, deleteFromBlob } from '@/lib/storage/blob';
 
 // GET - Download a saved export
@@ -20,9 +20,9 @@ export async function GET(
     const { id } = await params;
 
     // Get the export
-    const savedExport = await prisma.savedExport.findFirst({
+    const savedExport = await withRetry(() => prisma.savedExport.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!savedExport) {
       return NextResponse.json(
@@ -96,9 +96,9 @@ export async function DELETE(
     const { id } = await params;
 
     // Get the export
-    const savedExport = await prisma.savedExport.findFirst({
+    const savedExport = await withRetry(() => prisma.savedExport.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!savedExport) {
       return NextResponse.json(
@@ -111,9 +111,9 @@ export async function DELETE(
     await deleteFromBlob(savedExport.fileUrl);
 
     // Delete from database
-    await prisma.savedExport.delete({
+    await withRetry(() => prisma.savedExport.delete({
       where: { id },
-    });
+    }));
 
     return NextResponse.json({
       success: true,

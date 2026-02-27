@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { createCheckoutSession, getPriceIdForTier } from '@/lib/stripe';
 import { isValidTier, TierName } from '@/lib/subscription/tiers';
 
@@ -34,10 +34,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user and their existing subscription
-    const user = await prisma.user.findUnique({
+    const user = await withRetry(() => prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true },
-    });
+    }));
 
     if (!user) {
       return NextResponse.json(

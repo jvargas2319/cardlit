@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { uploadToBlob } from '@/lib/storage/blob';
 import { getPdfPageCount } from '@/lib/processing/pdf-converter';
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     const { url: blobUrl } = await uploadToBlob(fileBuffer, `uploads/${file.name}`);
 
     // Create job record
-    const job = await prisma.job.create({
+    const job = await withRetry(() => prisma.job.create({
       data: {
         userId,
         fileName: file.name,
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
         vocabulary: [],
         concepts: [],
       },
-    });
+    }));
 
     // Record page usage after successful job creation
     await recordPageUsage(userId, totalPages);
@@ -158,7 +158,7 @@ export async function GET() {
       );
     }
 
-    const jobs = await prisma.job.findMany({
+    const jobs = await withRetry(() => prisma.job.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -173,7 +173,7 @@ export async function GET() {
         createdAt: true,
         completedAt: true,
       },
-    });
+    }));
 
     return NextResponse.json({
       success: true,

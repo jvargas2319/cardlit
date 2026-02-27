@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { constructWebhookEvent, getTierFromPriceId, mapSubscriptionStatusToTier } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
@@ -99,7 +99,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     : null;
 
   // Upsert subscription record
-  await prisma.subscription.upsert({
+  await withRetry(() => prisma.subscription.upsert({
     where: { userId },
     update: {
       tier: tier || 'basic',
@@ -122,7 +122,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       pagesUsedThisPeriod: 0,
       exportsUsedThisPeriod: 0,
     },
-  });
+  }));
 
   console.log(`Subscription created for user ${userId}: ${tier}`);
 }
@@ -132,9 +132,9 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const { tier, status } = mapSubscriptionStatusToTier(subscription);
 
   // Try to find subscription by Stripe subscription ID
-  const existingSub = await prisma.subscription.findUnique({
+  const existingSub = await withRetry(() => prisma.subscription.findUnique({
     where: { stripeSubId: subscription.id },
-  });
+  }));
 
   if (!existingSub && !userId) {
     console.error('Cannot find subscription to update');
@@ -158,7 +158,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     ? new Date(periodEndTimestamp * 1000)
     : null;
 
-  await prisma.subscription.update({
+  await withRetry(() => prisma.subscription.update({
     where: { userId: targetUserId },
     data: {
       tier,
@@ -171,16 +171,16 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
         exportsUsedThisPeriod: 0,
       }),
     },
-  });
+  }));
 
   console.log(`Subscription updated for user ${targetUserId}: ${tier} (${status})`);
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   // Find subscription by Stripe subscription ID
-  const existingSub = await prisma.subscription.findUnique({
+  const existingSub = await withRetry(() => prisma.subscription.findUnique({
     where: { stripeSubId: subscription.id },
-  });
+  }));
 
   if (!existingSub) {
     console.error('Cannot find subscription to delete');
@@ -188,14 +188,14 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   }
 
   // Downgrade to free tier
-  await prisma.subscription.update({
+  await withRetry(() => prisma.subscription.update({
     where: { userId: existingSub.userId },
     data: {
       tier: 'free',
       status: 'canceled',
       stripeSubId: null,
     },
-  });
+  }));
 
   console.log(`Subscription canceled for user ${existingSub.userId}`);
 }
@@ -208,9 +208,9 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   if (!subscriptionId) return;
 
   // Find subscription by Stripe subscription ID
-  const existingSub = await prisma.subscription.findUnique({
+  const existingSub = await withRetry(() => prisma.subscription.findUnique({
     where: { stripeSubId: subscriptionId },
-  });
+  }));
 
   if (!existingSub) {
     console.error('Cannot find subscription for failed payment');
@@ -218,12 +218,12 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   }
 
   // Mark as past due
-  await prisma.subscription.update({
+  await withRetry(() => prisma.subscription.update({
     where: { userId: existingSub.userId },
     data: {
       status: 'past_due',
     },
-  });
+  }));
 
   console.log(`Payment failed for user ${existingSub.userId}`);
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
 export async function GET() {
@@ -13,10 +13,10 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await withRetry(() => prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true, createdAt: true },
-    });
+    }));
 
     if (!user) {
       return NextResponse.json(

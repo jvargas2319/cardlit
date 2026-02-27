@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { deleteFromBlob } from '@/lib/storage/blob';
 
@@ -19,7 +19,7 @@ export async function GET(
 
     const { id } = await params;
 
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
       select: {
         id: true,
@@ -36,7 +36,7 @@ export async function GET(
         updatedAt: true,
         completedAt: true,
       },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -74,9 +74,9 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -91,9 +91,9 @@ export async function DELETE(
     }
 
     // Delete job from database
-    await prisma.job.delete({
+    await withRetry(() => prisma.job.delete({
       where: { id },
-    });
+    }));
 
     return NextResponse.json({ success: true });
   } catch (error) {

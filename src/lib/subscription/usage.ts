@@ -3,7 +3,7 @@
  * Handles page limit checking and usage recording
  */
 
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getTierLimit, type TierName, isValidTier } from './tiers';
 
 export interface Usage {
@@ -29,9 +29,9 @@ export interface LimitCheck {
  * Get user's current usage stats
  */
 export async function getUserUsage(userId: string): Promise<Usage> {
-  const sub = await prisma.subscription.findUnique({
+  const sub = await withRetry(() => prisma.subscription.findUnique({
     where: { userId },
-  });
+  }));
 
   if (!sub) {
     // User has no subscription - they're on free tier
@@ -91,7 +91,7 @@ export async function canProcessPages(userId: string, pageCount: number): Promis
  * Creates subscription record if it doesn't exist
  */
 export async function recordPageUsage(userId: string, pageCount: number): Promise<void> {
-  await prisma.subscription.upsert({
+  await withRetry(() => prisma.subscription.upsert({
     where: { userId },
     update: {
       pagesUsedThisPeriod: {
@@ -103,14 +103,14 @@ export async function recordPageUsage(userId: string, pageCount: number): Promis
       tier: 'free',
       pagesUsedThisPeriod: pageCount,
     },
-  });
+  }));
 }
 
 /**
  * Reset monthly usage (for cron job)
  */
 export async function resetMonthlyUsage(): Promise<number> {
-  const result = await prisma.subscription.updateMany({
+  const result = await withRetry(() => prisma.subscription.updateMany({
     where: {
       status: 'active',
     },
@@ -118,7 +118,7 @@ export async function resetMonthlyUsage(): Promise<number> {
       pagesUsedThisPeriod: 0,
       currentPeriodStart: new Date(),
     },
-  });
+  }));
 
   return result.count;
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { extractFromPages } from '@/lib/vocabulary/extractor';
 import type { ExtractedPage, VocabularyEntry, ConceptEntry, ExtractionMode } from '@/types';
@@ -28,9 +28,9 @@ export async function POST(
     const { id } = await params;
 
     // Get job
-    const job = await prisma.job.findFirst({
+    const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
-    });
+    }));
 
     if (!job) {
       return NextResponse.json(
@@ -52,13 +52,13 @@ export async function POST(
     const extractionMode = (job.extractionMode as ExtractionMode) || 'language';
 
     // Update job status
-    await prisma.job.update({
+    await withRetry(() => prisma.job.update({
       where: { id },
       data: {
         status: 'processing',
         currentPhase: 'extracting',
       },
-    });
+    }));
 
     // Start timing extraction
     const extractionStartTime = Date.now();
@@ -67,13 +67,13 @@ export async function POST(
     const result = await extractFromPages(extractedText, extractionMode, {
       onProgress: async (current: number, total: number) => {
         // Update progress in database for polling
-        await prisma.job.update({
+        await withRetry(() => prisma.job.update({
           where: { id },
           data: {
             currentChunk: current,
             totalChunks: total,
           },
-        });
+        }));
       },
     });
 
@@ -86,14 +86,14 @@ export async function POST(
       const existingConcepts = (job.concepts as unknown as ConceptEntry[]) || [];
       const allConcepts = [...existingConcepts, ...result.concepts];
 
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           concepts: allConcepts as unknown as Prisma.InputJsonValue,
-          vocabularyCount: allConcepts.length, // Reuse vocabularyCount for total entries
+          vocabularyCount: allConcepts.length,
           currentPhase: 'extraction_complete',
         },
-      });
+      }));
 
       return NextResponse.json({
         success: true,
@@ -110,14 +110,14 @@ export async function POST(
       const existingVocabulary = (job.vocabulary as unknown as VocabularyEntry[]) || [];
       const allVocabulary = [...existingVocabulary, ...result.vocabulary];
 
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           vocabulary: allVocabulary as unknown as Prisma.InputJsonValue,
           vocabularyCount: allVocabulary.length,
           currentPhase: 'extraction_complete',
         },
-      });
+      }));
 
       return NextResponse.json({
         success: true,
@@ -136,13 +136,13 @@ export async function POST(
     // Try to update job with error status
     try {
       const { id } = await params;
-      await prisma.job.update({
+      await withRetry(() => prisma.job.update({
         where: { id },
         data: {
           status: 'failed',
           error: error instanceof Error ? error.message : 'Vocabulary extraction failed',
         },
-      });
+      }));
     } catch {
       // Ignore update errors
     }
