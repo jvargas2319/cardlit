@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { ExtractionMode } from '@/types';
 
 /**
@@ -76,6 +76,7 @@ interface ProcessingState {
   error?: string;
   jobId?: string;
   extractionMode?: ExtractionMode;
+  stoppedEarly?: boolean;
   // Timing data
   startTime?: number;
   elapsedTime?: number;
@@ -98,15 +99,26 @@ export function useProcessingFlow() {
     total: 0,
     message: '',
   });
+  const [isStopping, setIsStopping] = useState(false);
+  const stopRequestedRef = useRef(false);
+
+  const stopProcessing = useCallback(() => {
+    stopRequestedRef.current = true;
+    setIsStopping(true);
+  }, []);
 
   const processFile = useCallback(async (
     file: File,
     mode: ExtractionMode = 'language',
     languages: string[] = ['en']
   ): Promise<ProcessingResult | null> => {
-    const BATCH_SIZE = 2; // Reduced to 2 pages to ensure completion within 60s timeout
+    const BATCH_SIZE = 2;
     const processStartTime = Date.now();
     const batchTimes: number[] = [];
+    let stoppedEarly = false;
+
+    stopRequestedRef.current = false;
+    setIsStopping(false);
 
     try {
       // Phase 1: Upload file
@@ -150,16 +162,18 @@ export function useProcessingFlow() {
         jobId,
       });
 
-      // Phase 2: Process pages in batches (OCR)
+      // Phase 2: Process pages in batches (OCR) using fire-and-forget + polling
       for (let start = 1; start <= totalPages; start += BATCH_SIZE) {
+        if (stopRequestedRef.current) break;
+
         const end = Math.min(start + BATCH_SIZE - 1, totalPages);
         const currentBatch = Math.ceil(start / BATCH_SIZE);
         const totalBatches = Math.ceil(totalPages / BATCH_SIZE);
+        const batchStartTime = Date.now();
 
         const processLabel = fileType === 'image' ? 'image' : fileType === 'epub' ? 'chapters' : 'pages';
         const elapsedTime = Date.now() - processStartTime;
 
-        // Calculate estimated time remaining based on average batch time
         const avgBatchTime = batchTimes.length > 0
           ? batchTimes.reduce((a, b) => a + b, 0) / batchTimes.length
           : 0;
@@ -181,53 +195,79 @@ export function useProcessingFlow() {
           estimatedTimeRemaining,
         }));
 
-        const processResponse = await fetchWithRetry(
-          `/api/jobs/${jobId}/process`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ startPage: start, endPage: end, languages }),
-          },
-          { maxRetries: 2, timeoutMs: 300000 }
-        );
+        // Fire-and-forget: kick off batch, server returns 202 instantly
+        const processResponse = await fetch(`/api/jobs/${jobId}/process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startPage: start, endPage: end, languages }),
+        });
 
-        // Check if response is JSON (timeout errors return HTML)
-        const contentType = processResponse.headers.get('content-type');
-        if (!contentType?.includes('application/json')) {
-          throw new Error('Server timeout - please try again with a smaller file');
+        if (!processResponse.ok) {
+          const errData = await processResponse.json().catch(() => null);
+          throw new Error(errData?.error || 'Failed to start batch processing');
         }
 
-        const processData = await processResponse.json();
+        // Poll status until this batch completes
+        let batchDone = false;
+        while (!batchDone) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
 
-        if (!processData.success) {
-          throw new Error(processData.error || 'Failed to process pages');
+          if (stopRequestedRef.current) break;
+
+          const statusResponse = await fetch(`/api/jobs/${jobId}/status`);
+          const statusData = await statusResponse.json();
+
+          if (!statusData.success) continue;
+
+          if (statusData.data.status === 'failed') {
+            throw new Error(statusData.data.error || 'Processing failed');
+          }
+
+          setState(prev => ({
+            ...prev,
+            elapsedTime: Date.now() - processStartTime,
+          }));
+
+          if (statusData.data.pagesProcessed >= end) {
+            batchTimes.push(Date.now() - batchStartTime);
+            batchDone = true;
+          }
         }
 
-        // Track batch timing from API response
-        if (processData.data?.batchTimeMs) {
-          batchTimes.push(processData.data.batchTimeMs);
-        }
+        if (stopRequestedRef.current) break;
       }
 
-      setState(prev => ({
-        ...prev,
-        phase: 'ocr',
-        progress: totalPages,
-        total: totalPages,
-        message: 'OCR complete',
-        elapsedTime: Date.now() - processStartTime,
-      }));
+      if (stopRequestedRef.current) {
+        stoppedEarly = true;
+        stopRequestedRef.current = false;
+        setState(prev => ({
+          ...prev,
+          message: 'Stopping... extracting vocabulary from processed pages...',
+          elapsedTime: Date.now() - processStartTime,
+          estimatedTimeRemaining: undefined,
+        }));
+      } else {
+        setState(prev => ({
+          ...prev,
+          phase: 'ocr',
+          progress: totalPages,
+          total: totalPages,
+          message: 'OCR complete',
+          elapsedTime: Date.now() - processStartTime,
+        }));
+      }
 
       // Phase 3: Extract vocabulary/concepts in batches
       const extractLabel = mode === 'concept' ? 'concepts' : 'vocabulary';
-      
-      // First, get the total number of chunks
+
       setState(prev => ({
         ...prev,
         phase: 'extracting',
         progress: 0,
         total: 1,
-        message: `Preparing to extract ${extractLabel}...`,
+        message: stoppedEarly
+          ? `Extracting ${extractLabel} from processed pages...`
+          : `Preparing to extract ${extractLabel}...`,
         elapsedTime: Date.now() - processStartTime,
         currentBatch: undefined,
         totalBatches: undefined,
@@ -239,6 +279,19 @@ export function useProcessingFlow() {
       const chunksData = await chunksResponse.json();
 
       if (!chunksData.success) {
+        if (stoppedEarly) {
+          setIsStopping(false);
+          setState({
+            phase: 'error',
+            progress: 0,
+            total: 0,
+            message: 'Not enough content was processed to extract results.',
+            error: 'Processing was stopped before any pages were fully processed. Try processing more pages.',
+            jobId,
+            stoppedEarly: true,
+          });
+          return null;
+        }
         throw new Error(chunksData.error || 'Failed to get chunk count');
       }
 
@@ -246,11 +299,11 @@ export function useProcessingFlow() {
       const extractionChunkTimes: number[] = [];
       let totalEntriesFound = 0;
 
-      // Process each chunk
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        if (stopRequestedRef.current) break;
+
         const elapsedTime = Date.now() - processStartTime;
 
-        // Calculate estimated time remaining
         const avgChunkTime = extractionChunkTimes.length > 0
           ? extractionChunkTimes.reduce((a, b) => a + b, 0) / extractionChunkTimes.length
           : 0;
@@ -280,7 +333,6 @@ export function useProcessingFlow() {
           { maxRetries: 2, timeoutMs: 300000 }
         );
 
-        // Check if response is JSON
         const contentType = chunkResponse.headers.get('content-type');
         if (!contentType?.includes('application/json')) {
           throw new Error('Server timeout during extraction - please try again');
@@ -292,22 +344,47 @@ export function useProcessingFlow() {
           throw new Error(chunkData.error || `Failed to extract chunk ${chunkIndex + 1}`);
         }
 
-        // Track timing and entries
         if (chunkData.data?.chunkTimeMs) {
           extractionChunkTimes.push(chunkData.data.chunkTimeMs);
         }
         totalEntriesFound = chunkData.data?.totalEntries || totalEntriesFound;
       }
 
-      const foundLabel = mode === 'concept' ? 'concept' : 'vocabulary';
-      setState(prev => ({
-        ...prev,
-        phase: 'extracting',
-        progress: totalChunks,
-        total: totalChunks,
-        message: `Found ${totalEntriesFound} ${foundLabel} entries`,
-        elapsedTime: Date.now() - processStartTime,
-      }));
+      if (stopRequestedRef.current) {
+        stoppedEarly = true;
+        stopRequestedRef.current = false;
+      }
+
+      // Check if there's any vocabulary to finalize
+      const statusCheck = await fetch(`/api/jobs/${jobId}/status`);
+      const statusCheckData = await statusCheck.json();
+      const vocabCount = statusCheckData.data?.vocabularyCount ?? 0;
+
+      if (vocabCount === 0 && stoppedEarly) {
+        setIsStopping(false);
+        setState({
+          phase: 'error',
+          progress: 0,
+          total: 0,
+          message: 'Not enough content was processed to extract results.',
+          error: 'No vocabulary entries were found in the processed pages. Try processing more pages or a different file.',
+          jobId,
+          stoppedEarly: true,
+        });
+        return null;
+      }
+
+      if (!stoppedEarly) {
+        const foundLabel = mode === 'concept' ? 'concept' : 'vocabulary';
+        setState(prev => ({
+          ...prev,
+          phase: 'extracting',
+          progress: totalChunks,
+          total: totalChunks,
+          message: `Found ${totalEntriesFound} ${foundLabel} entries`,
+          elapsedTime: Date.now() - processStartTime,
+        }));
+      }
 
       // Phase 4: Finalize
       setState(prev => ({
@@ -315,8 +392,9 @@ export function useProcessingFlow() {
         phase: 'finalizing',
         progress: 0,
         total: 1,
-        message: 'Generating CSV file...',
+        message: stoppedEarly ? 'Generating partial results...' : 'Generating CSV file...',
         elapsedTime: Date.now() - processStartTime,
+        estimatedTimeRemaining: undefined,
       }));
 
       const finalizeResponse = await fetch(`/api/jobs/${jobId}/finalize`, {
@@ -332,13 +410,18 @@ export function useProcessingFlow() {
       // Complete!
       const completeLabel = mode === 'concept' ? 'concept' : 'vocabulary';
       const totalTimeFormatted = finalizeData.data.totalTimeFormatted || formatDuration(Date.now() - processStartTime);
+
+      setIsStopping(false);
       setState({
         phase: 'complete',
         progress: 1,
         total: 1,
-        message: `Successfully extracted ${finalizeData.data.vocabularyCount} ${completeLabel} entries!`,
+        message: stoppedEarly
+          ? `Partial results: extracted ${finalizeData.data.vocabularyCount} ${completeLabel} entries`
+          : `Successfully extracted ${finalizeData.data.vocabularyCount} ${completeLabel} entries!`,
         jobId,
         extractionMode: mode,
+        stoppedEarly,
         elapsedTime: Date.now() - processStartTime,
         totalTimeFormatted,
       });
@@ -350,6 +433,7 @@ export function useProcessingFlow() {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      setIsStopping(false);
       setState(prev => ({
         ...prev,
         phase: 'error',
@@ -412,6 +496,8 @@ export function useProcessingFlow() {
   return {
     state,
     processFile,
+    stopProcessing,
+    isStopping,
     reset,
     downloadCsv,
     downloadFlashcards,

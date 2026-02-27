@@ -35,7 +35,7 @@ export default function UploadPage() {
   const [savingExport, setSavingExport] = useState<SavedExportType | null>(null);
   const [savedExports, setSavedExports] = useState<SavedExportType[]>([]);
   const [downloadingType, setDownloadingType] = useState<'anki' | 'excel' | 'flashcards' | null>(null);
-  const { state, processFile, reset, downloadCsv, downloadFlashcards, isProcessing, isComplete, hasError } = useProcessingFlow();
+  const { state, processFile, stopProcessing, isStopping, reset, downloadCsv, downloadFlashcards, isProcessing, isComplete, hasError } = useProcessingFlow();
 
   // Wrapper for download with loading state
   const handleDownloadCsv = async (format: 'anki' | 'excel') => {
@@ -278,6 +278,9 @@ export default function UploadPage() {
               total={state.total}
               message={state.message}
               error={state.error}
+              stoppedEarly={state.stoppedEarly}
+              onStop={stopProcessing}
+              isStopping={isStopping}
               elapsedTime={state.elapsedTime}
               estimatedTimeRemaining={state.estimatedTimeRemaining}
               currentBatch={state.currentBatch}

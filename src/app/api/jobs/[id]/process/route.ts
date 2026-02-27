@@ -10,12 +10,115 @@ import type { ExtractedPage, PageImage } from '@/types';
 import type { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // 60 seconds for Vercel Pro
+export const maxDuration = 60;
+
+interface JobRecord {
+  id: string;
+  blobUrl: string | null;
+  fileType: string;
+  totalPages: number;
+  pagesProcessed: number;
+  extractedText: unknown;
+}
 
 /**
- * Process a batch of pages (OCR)
+ * Run OCR batch in the background. Updates the DB when done.
+ * Runs detached from the HTTP request lifecycle.
+ */
+async function runOcrBatch(
+  id: string,
+  job: JobRecord,
+  startPage: number,
+  endPage: number,
+  languages: string[]
+) {
+  const batchStartTime = Date.now();
+  let newPages: ExtractedPage[] = [];
+
+  if (job.fileType === 'pdf') {
+    const images = await convertPdfFromUrlToImages(job.blobUrl!, {
+      startPage,
+      endPage,
+      dpi: 300,
+    });
+
+    const processedImages = await preprocessImages(images);
+    const vision = await getVisionClient(languages);
+    const ocrResults = await vision.processImagesBatch(processedImages);
+
+    console.log('[OCR DEBUG] Extracted text from PDF pages:');
+    for (const result of ocrResults) {
+      console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
+      console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
+    }
+
+    newPages = ocrResults.map(result => ({
+      pageNumber: result.pageNumber,
+      text: result.text,
+    }));
+  } else if (job.fileType === 'epub') {
+    const epubResult = await extractTextFromEpubUrl(job.blobUrl!);
+    newPages = epubResult.chapters
+      .filter(ch => ch.index >= startPage && ch.index <= endPage)
+      .map(ch => ({
+        pageNumber: ch.index,
+        text: ch.text,
+      }));
+  } else if (job.fileType === 'image') {
+    const imageBuffer = await downloadFromBlob(job.blobUrl!);
+    const images: PageImage[] = [{ pageNumber: 1, buffer: imageBuffer }];
+    const processedImages = await preprocessImages(images);
+    const vision = await getVisionClient(languages);
+    const ocrResults = await vision.processImagesBatch(processedImages);
+
+    console.log('[OCR DEBUG] Extracted text from image:');
+    for (const result of ocrResults) {
+      console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
+      console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
+    }
+
+    newPages = ocrResults.map(result => ({
+      pageNumber: result.pageNumber,
+      text: result.text,
+    }));
+  }
+
+  // Re-read job to get latest state (avoids race conditions with concurrent batches)
+  const freshJob = await withRetry(() => prisma.job.findUnique({ where: { id } }));
+
+  // If the job was already finalized (e.g. user stopped early), don't overwrite it
+  if (freshJob?.status === 'complete') return;
+
+  const existingText = (freshJob?.extractedText as unknown as ExtractedPage[]) || [];
+  const updatedText = [...existingText, ...newPages];
+
+  const pagesProcessed = Math.max(freshJob?.pagesProcessed ?? 0, endPage);
+
+  const batchTimeMs = Date.now() - batchStartTime;
+  const pagesInBatch = endPage - startPage + 1;
+  const avgPageTimeMs = Math.round(batchTimeMs / pagesInBatch);
+  const totalBatches = Math.ceil(job.totalPages / pagesInBatch);
+  const currentBatch = Math.ceil(endPage / pagesInBatch);
+
+  console.log(`[PROCESS] Job ${id} - OCR Batch ${currentBatch}/${totalBatches} (pages ${startPage}-${endPage}) completed in ${(batchTimeMs / 1000).toFixed(1)}s (${avgPageTimeMs}ms/page)`);
+
+  await withRetry(() => prisma.job.update({
+    where: { id },
+    data: {
+      extractedText: updatedText as unknown as Prisma.InputJsonValue,
+      pagesProcessed,
+      currentPhase: pagesProcessed >= job.totalPages ? 'ocr_complete' : 'ocr',
+    },
+  }));
+}
+
+/**
+ * Process a batch of pages (OCR) - fire-and-forget
  * POST /api/jobs/[id]/process
  * Body: { startPage: number, endPage: number, languages?: string[] }
+ *
+ * Returns 202 immediately. OCR runs in the background.
+ * Client polls GET /api/jobs/[id]/status to track progress.
  */
 export async function POST(
   request: NextRequest,
@@ -32,9 +135,8 @@ export async function POST(
 
     const { id } = await params;
     const body = await request.json();
-    const { startPage, endPage, languages = ['ar', 'en'] } = body;  // Default to Arabic+English for multilingual support
+    const { startPage, endPage, languages = ['ar', 'en'] } = body;
 
-    // Validate input
     if (!startPage || !endPage || startPage > endPage) {
       return NextResponse.json(
         { success: false, error: 'Invalid page range' },
@@ -42,7 +144,6 @@ export async function POST(
       );
     }
 
-    // Get job
     const job = await withRetry(() => prisma.job.findFirst({
       where: { id, userId },
     }));
@@ -61,7 +162,6 @@ export async function POST(
       );
     }
 
-    // Update job status
     await withRetry(() => prisma.job.update({
       where: { id },
       data: {
@@ -70,143 +170,35 @@ export async function POST(
       },
     }));
 
-    // Start timing this batch
-    const batchStartTime = Date.now();
-    let newPages: ExtractedPage[] = [];
-
-    if (job.fileType === 'pdf') {
-      // Convert PDF pages to images
-      const images = await convertPdfFromUrlToImages(job.blobUrl, {
-        startPage,
-        endPage,
-        dpi: 300,
-      });
-
-      // Preprocess images for better OCR
-      const processedImages = await preprocessImages(images);
-
-      // Run OCR
-      const vision = await getVisionClient(languages);
-      const ocrResults = await vision.processImagesBatch(processedImages);
-
-      // Debug: Log OCR output to help diagnose extraction issues
-      console.log('[OCR DEBUG] Extracted text from PDF pages:');
-      for (const result of ocrResults) {
-        console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
-        // Log first 300 chars to see what OCR captured (especially from colored regions)
-        console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
-      }
-
-      // Convert to ExtractedPage format
-      newPages = ocrResults.map(result => ({
-        pageNumber: result.pageNumber,
-        text: result.text,
-      }));
-    } else if (job.fileType === 'epub') {
-      // For EPUB, extract text directly (no OCR needed for most EPUBs)
-      const epubResult = await extractTextFromEpubUrl(job.blobUrl);
-
-      // Map chapters to pages (startPage/endPage refer to chapter indices)
-      newPages = epubResult.chapters
-        .filter(ch => ch.index >= startPage && ch.index <= endPage)
-        .map(ch => ({
-          pageNumber: ch.index,
-          text: ch.text,
+    // Kick off OCR in background (no await)
+    runOcrBatch(id, job, startPage, endPage, languages).catch(async (error) => {
+      console.error('Background OCR error:', error);
+      try {
+        const currentJob = await prisma.job.findUnique({ where: { id }, select: { status: true } });
+        if (currentJob?.status === 'complete') return;
+        await withRetry(() => prisma.job.update({
+          where: { id },
+          data: {
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Processing failed',
+          },
         }));
-    } else if (job.fileType === 'image') {
-      // For images, download and process directly through OCR
-      const imageBuffer = await downloadFromBlob(job.blobUrl);
-
-      // Create PageImage array (single image = page 1)
-      const images: PageImage[] = [{
-        pageNumber: 1,
-        buffer: imageBuffer,
-      }];
-
-      // Preprocess image for better OCR
-      const processedImages = await preprocessImages(images);
-
-      // Run OCR
-      const vision = await getVisionClient(languages);
-      const ocrResults = await vision.processImagesBatch(processedImages);
-
-      // Debug: Log OCR output to help diagnose extraction issues
-      console.log('[OCR DEBUG] Extracted text from image:');
-      for (const result of ocrResults) {
-        console.log(`  Page ${result.pageNumber} (confidence: ${result.confidence?.toFixed(1) || 'N/A'}%):`);
-        console.log(`  Text preview: ${result.text.substring(0, 300).replace(/\n/g, ' ')}...`);
+      } catch {
+        // Ignore update errors
       }
-
-      // Convert to ExtractedPage format
-      newPages = ocrResults.map(result => ({
-        pageNumber: result.pageNumber,
-        text: result.text,
-      }));
-    }
-
-    // Get existing extracted text and append
-    const existingText = (job.extractedText as unknown as ExtractedPage[]) || [];
-    const updatedText = [...existingText, ...newPages];
-
-    // Calculate pages processed
-    const pagesProcessed = Math.max(
-      job.pagesProcessed,
-      endPage
-    );
-
-    // Calculate timing
-    const batchTimeMs = Date.now() - batchStartTime;
-    const pagesInBatch = endPage - startPage + 1;
-    const avgPageTimeMs = Math.round(batchTimeMs / pagesInBatch);
-    const totalBatches = Math.ceil(job.totalPages / (endPage - startPage + 1));
-    const currentBatch = Math.ceil(endPage / (endPage - startPage + 1));
-
-    // Log timing for debugging
-    console.log(`[PROCESS] Job ${id} - OCR Batch ${currentBatch}/${totalBatches} (pages ${startPage}-${endPage}) completed in ${(batchTimeMs / 1000).toFixed(1)}s (${avgPageTimeMs}ms/page)`);
-
-    // Update job with new text
-    await withRetry(() => prisma.job.update({
-      where: { id },
-      data: {
-        extractedText: updatedText as unknown as Prisma.InputJsonValue,
-        pagesProcessed,
-        currentPhase: pagesProcessed >= job.totalPages ? 'ocr_complete' : 'ocr',
-      },
-    }));
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        pagesProcessed,
-        totalPages: job.totalPages,
-        newPagesCount: newPages.length,
-        status: pagesProcessed >= job.totalPages ? 'ocr_complete' : 'processing',
-        // Timing data
-        batchTimeMs,
-        avgPageTimeMs,
-        currentBatch,
-        totalBatches,
-      },
     });
-  } catch (error) {
-    console.error('Process batch error:', error);
-
-    // Try to update job with error status
-    try {
-      const { id } = await params;
-      await withRetry(() => prisma.job.update({
-        where: { id },
-        data: {
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Processing failed',
-        },
-      }));
-    } catch {
-      // Ignore update errors
-    }
 
     return NextResponse.json(
-      { success: false, error: 'Failed to process batch' },
+      {
+        success: true,
+        data: { status: 'accepted', startPage, endPage },
+      },
+      { status: 202 }
+    );
+  } catch (error) {
+    console.error('Process batch error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to start batch processing' },
       { status: 500 }
     );
   }
