@@ -1,6 +1,5 @@
 /**
- * OpenRouter API Client
- * Integrates with Llama 3.1 8B for vocabulary extraction
+ * OpenRouter API Client for vocabulary extraction
  */
 
 interface ChatMessage {
@@ -27,22 +26,30 @@ interface OpenRouterResponse {
 interface OpenRouterConfig {
   apiKey: string;
   model: string;
+  fallbackModel?: string;
   maxRetries: number;
   retryDelayMs: number;
   timeoutMs: number;
 }
 
+const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct';
+
 const DEFAULT_CONFIG: Partial<OpenRouterConfig> = {
-  model: 'meta-llama/llama-3.3-70b-instruct:free',
-  maxRetries: 3,
-  retryDelayMs: 2000,
+  model: process.env.OPENROUTER_EXTRACTION_MODEL || DEFAULT_MODEL,
+  fallbackModel: process.env.OPENROUTER_FALLBACK_MODEL || undefined,
+  maxRetries: 5,
+  retryDelayMs: 3000,
   timeoutMs: 120000,
 };
 
-class OpenRouterError extends Error {
+export class OpenRouterError extends Error {
   constructor(public status: number, message: string) {
     super(`OpenRouter API Error (${status}): ${message}`);
     this.name = 'OpenRouterError';
+  }
+
+  get isRateLimited(): boolean {
+    return this.status === 429;
   }
 }
 
@@ -51,7 +58,6 @@ export class OpenRouterClient {
   private lastRequestTime = 0;
 
   constructor(apiKey?: string, config: Partial<OpenRouterConfig> = {}) {
-    // Check for both undefined and empty string (system env might have empty value)
     const envKey = process.env.OPENROUTER_API_KEY;
     const key = apiKey || (envKey && envKey.trim() ? envKey : undefined);
     if (!key) {
@@ -63,25 +69,41 @@ export class OpenRouterClient {
       ...DEFAULT_CONFIG,
       ...config,
     } as OpenRouterConfig;
+
+    console.log(`[OpenRouter] Using extraction model: ${this.config.model}${this.config.fallbackModel ? `, fallback: ${this.config.fallbackModel}` : ''}`);
   }
 
   async chat(messages: ChatMessage[], temperature = 0.1): Promise<string> {
     await this.enforceRateLimit();
 
-    const response = await this.makeRequest(messages, temperature);
+    try {
+      const response = await this.makeRequest(messages, temperature, this.config.model);
 
-    if (!response.choices || response.choices.length === 0) {
-      console.error('OpenRouter returned no choices:', response);
-      throw new Error('OpenRouter API returned empty response');
+      if (!response.choices || response.choices.length === 0) {
+        console.error('OpenRouter returned no choices:', response);
+        throw new Error('OpenRouter API returned empty response');
+      }
+
+      return response.choices[0]?.message?.content || '';
+    } catch (error) {
+      if (this.config.fallbackModel && error instanceof OpenRouterError && error.isRateLimited) {
+        console.log(`[OpenRouter] Primary model rate-limited, trying fallback: ${this.config.fallbackModel}`);
+        const response = await this.makeRequest(messages, temperature, this.config.fallbackModel);
+
+        if (!response.choices || response.choices.length === 0) {
+          throw new Error('OpenRouter fallback model returned empty response');
+        }
+
+        return response.choices[0]?.message?.content || '';
+      }
+      throw error;
     }
-
-    const content = response.choices[0]?.message?.content || '';
-    return content;
   }
 
   private async makeRequest(
     messages: ChatMessage[],
     temperature: number,
+    model: string,
     attempt = 1
   ): Promise<OpenRouterResponse> {
     try {
@@ -97,7 +119,7 @@ export class OpenRouterClient {
           'X-Title': 'Cardlit',
         },
         body: JSON.stringify({
-          model: this.config.model,
+          model,
           messages,
           temperature,
           max_tokens: 4096,
@@ -109,7 +131,16 @@ export class OpenRouterClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new OpenRouterError(response.status, errorText);
+        const err = new OpenRouterError(response.status, errorText);
+
+        if (err.isRateLimited) {
+          const retryAfter = response.headers.get('retry-after');
+          if (retryAfter) {
+            (err as OpenRouterError & { retryAfterMs?: number }).retryAfterMs = parseInt(retryAfter, 10) * 1000;
+          }
+        }
+
+        throw err;
       }
 
       this.lastRequestTime = Date.now();
@@ -117,18 +148,24 @@ export class OpenRouterClient {
       return await response.json();
     } catch (error) {
       if (this.shouldRetry(error, attempt)) {
-        const delay = this.config.retryDelayMs * Math.pow(2, attempt - 1);
-        console.log(`Retrying OpenRouter request (attempt ${attempt + 1}) after ${delay}ms...`);
+        const jitter = Math.random() * 1000;
+        let delay = this.config.retryDelayMs * Math.pow(2, attempt - 1) + jitter;
+
+        const retryAfterMs = (error as { retryAfterMs?: number })?.retryAfterMs;
+        if (retryAfterMs && retryAfterMs > delay) {
+          delay = retryAfterMs + jitter;
+        }
+
+        console.log(`[OpenRouter] Retrying request (attempt ${attempt + 1}/${this.config.maxRetries}) after ${Math.round(delay)}ms...`);
         await this.delay(delay);
-        return this.makeRequest(messages, temperature, attempt + 1);
+        return this.makeRequest(messages, temperature, model, attempt + 1);
       }
       throw error;
     }
   }
 
   private async enforceRateLimit(): Promise<void> {
-    // Enforce minimum 2 seconds between requests for free tier
-    const minIntervalMs = 2000;
+    const minIntervalMs = 500;
     const elapsed = Date.now() - this.lastRequestTime;
 
     if (elapsed < minIntervalMs) {
@@ -140,11 +177,9 @@ export class OpenRouterClient {
     if (attempt >= this.config.maxRetries) return false;
 
     if (error instanceof OpenRouterError) {
-      // Retry on rate limit (429) and server errors (5xx)
       return error.status === 429 || error.status >= 500;
     }
 
-    // Retry on network errors
     return error instanceof TypeError ||
            (error as { name?: string })?.name === 'AbortError';
   }
@@ -154,7 +189,6 @@ export class OpenRouterClient {
   }
 }
 
-// Singleton instance
 let clientInstance: OpenRouterClient | null = null;
 
 export function getOpenRouterClient(): OpenRouterClient {

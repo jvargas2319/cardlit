@@ -360,16 +360,26 @@ export function useProcessingFlow() {
       const statusCheckData = await statusCheck.json();
       const vocabCount = statusCheckData.data?.vocabularyCount ?? 0;
 
-      if (vocabCount === 0 && stoppedEarly) {
+      if (vocabCount === 0) {
         setIsStopping(false);
+
+        const jobErrors = statusCheckData.data?.errors as string[] | undefined;
+        const hasRateLimitError = jobErrors?.some((e: string) => e.includes('429') || e.includes('rate limit'));
+
+        const errorMsg = hasRateLimitError
+          ? 'The AI model was rate-limited (429) during extraction. Check your OpenRouter plan limits, or set OPENROUTER_EXTRACTION_MODEL in .env to use a different model.'
+          : stoppedEarly
+            ? 'No vocabulary entries were found in the processed pages. Try processing more pages or a different file.'
+            : 'No vocabulary entries were found. The AI extraction may have failed. Check the server logs for details.';
+
         setState({
           phase: 'error',
           progress: 0,
           total: 0,
-          message: 'Not enough content was processed to extract results.',
-          error: 'No vocabulary entries were found in the processed pages. Try processing more pages or a different file.',
+          message: hasRateLimitError ? 'AI model rate-limited during extraction.' : 'Not enough content was processed to extract results.',
+          error: errorMsg,
           jobId,
-          stoppedEarly: true,
+          stoppedEarly,
         });
         return null;
       }

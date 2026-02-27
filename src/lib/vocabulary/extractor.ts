@@ -6,7 +6,7 @@
  * - concept: Extract key terms and definitions from textbooks
  */
 
-import { getOpenRouterClient } from '@/lib/llm/openrouter';
+import { getOpenRouterClient, OpenRouterError } from '@/lib/llm/openrouter';
 import {
   SYSTEM_PROMPT,
   CONCEPT_SYSTEM_PROMPT,
@@ -89,7 +89,10 @@ export async function extractVocabularyFromChunk(
 
     return { vocabulary: valid, validationStats: stats };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isRateLimit = error instanceof OpenRouterError && error.isRateLimited;
+    const errorMessage = isRateLimit
+      ? `Rate limited by AI provider (429). ${error.message}`
+      : error instanceof Error ? error.message : 'Unknown error';
     console.error(`Failed to extract vocabulary from chunk ${chunk.index}:`, errorMessage);
     return { vocabulary: [], error: errorMessage };
   }
@@ -144,7 +147,10 @@ export async function extractConceptsFromChunk(
 
     return { concepts: valid, validationStats: stats };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isRateLimit = error instanceof OpenRouterError && error.isRateLimited;
+    const errorMessage = isRateLimit
+      ? `Rate limited by AI provider (429). ${error.message}`
+      : error instanceof Error ? error.message : 'Unknown error';
     console.error(`Failed to extract concepts from chunk ${chunk.index}:`, errorMessage);
     return { concepts: [], error: errorMessage };
   }
