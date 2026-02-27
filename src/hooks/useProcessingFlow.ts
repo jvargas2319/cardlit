@@ -188,7 +188,7 @@ export function useProcessingFlow() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ startPage: start, endPage: end, languages }),
           },
-          { maxRetries: 2, timeoutMs: 55000 }
+          { maxRetries: 2, timeoutMs: 300000 }
         );
 
         // Check if response is JSON (timeout errors return HTML)
@@ -277,7 +277,7 @@ export function useProcessingFlow() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chunkIndex }),
           },
-          { maxRetries: 2, timeoutMs: 55000 }
+          { maxRetries: 2, timeoutMs: 300000 }
         );
 
         // Check if response is JSON
