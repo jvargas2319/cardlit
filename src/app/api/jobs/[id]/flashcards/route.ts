@@ -84,7 +84,7 @@ export async function GET(
     }
 
     // Generate filename
-    const baseName = job.fileName.replace(/\.(pdf|epub)$/i, '');
+    const baseName = job.fileName.replace(/\.pdf$/i, '');
     const pdfFileName = `${baseName}_flashcards.pdf`;
 
     // Return PDF as download

@@ -11,7 +11,7 @@ interface FileUploadProps {
 export function FileUpload({
   onFileSelect,
   disabled = false,
-  accept = '.pdf,.epub,.png,.jpg,.jpeg,.webp'
+  accept = '.pdf,.png,.jpg,.jpeg,.webp'
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -39,14 +39,14 @@ export function FileUpload({
     if (files.length > 0) {
       const file = files[0];
       const fileName = file.name.toLowerCase();
-      const validExtensions = ['.pdf', '.epub', '.png', '.jpg', '.jpeg', '.webp'];
+      const validExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
       const isValid = validExtensions.some(ext => fileName.endsWith(ext));
 
       if (isValid) {
         setSelectedFile(file);
         onFileSelect(file);
       } else {
-        alert('Please select a PDF, EPUB, or image file (PNG, JPG, WebP)');
+        alert('Please select a PDF or image file (PNG, JPG, WebP)');
       }
     }
   }, [disabled, onFileSelect]);
@@ -120,7 +120,7 @@ export function FileUpload({
             </span>
             {' '}or drag and drop
           </div>
-          <p className="text-xs text-slate-500">PDF, EPUB, or images including handwritten notes</p>
+          <p className="text-xs text-slate-500">PDF or images including handwritten notes (max 100 pages)</p>
           <p className="text-xs text-purple-400/80 mt-1">Supports 100+ languages - clear handwriting works best</p>
         </div>
       </div>

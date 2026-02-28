@@ -24,7 +24,6 @@ export async function GET(
     const ext = path.extname(filename).toLowerCase();
     const contentTypes: Record<string, string> = {
       '.pdf': 'application/pdf',
-      '.epub': 'application/epub+zip',
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',

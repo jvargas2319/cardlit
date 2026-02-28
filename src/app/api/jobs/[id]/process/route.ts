@@ -4,7 +4,6 @@ import { getAuthUser } from '@/lib/auth';
 import { convertPdfFromUrlToImages } from '@/lib/processing/pdf-converter';
 import { preprocessImages } from '@/lib/processing/preprocessor';
 import { getVisionClient } from '@/lib/processing/openrouter-vision';
-import { extractTextFromEpubUrl } from '@/lib/processing/epub-extractor';
 import { downloadFromBlob } from '@/lib/storage/blob';
 import type { ExtractedPage, PageImage } from '@/types';
 import type { Prisma } from '@prisma/client';
@@ -56,14 +55,6 @@ async function runOcrBatch(
       pageNumber: result.pageNumber,
       text: result.text,
     }));
-  } else if (job.fileType === 'epub') {
-    const epubResult = await extractTextFromEpubUrl(job.blobUrl!);
-    newPages = epubResult.chapters
-      .filter(ch => ch.index >= startPage && ch.index <= endPage)
-      .map(ch => ({
-        pageNumber: ch.index,
-        text: ch.text,
-      }));
   } else if (job.fileType === 'image') {
     const imageBuffer = await downloadFromBlob(job.blobUrl!);
     const images: PageImage[] = [{ pageNumber: 1, buffer: imageBuffer }];

@@ -153,7 +153,7 @@ export function useProcessingFlow() {
 
       const { jobId, totalPages, fileType } = uploadData.data;
 
-      const itemLabel = fileType === 'epub' ? 'chapters' : fileType === 'image' ? 'image' : 'pages';
+      const itemLabel = fileType === 'image' ? 'image' : 'pages';
       setState({
         phase: 'uploading',
         progress: 1,
@@ -171,7 +171,7 @@ export function useProcessingFlow() {
         const totalBatches = Math.ceil(totalPages / BATCH_SIZE);
         const batchStartTime = Date.now();
 
-        const processLabel = fileType === 'image' ? 'image' : fileType === 'epub' ? 'chapters' : 'pages';
+        const processLabel = fileType === 'image' ? 'image' : 'pages';
         const elapsedTime = Date.now() - processStartTime;
 
         const avgBatchTime = batchTimes.length > 0
@@ -209,15 +209,31 @@ export function useProcessingFlow() {
 
         // Poll status until this batch completes
         let batchDone = false;
+        let consecutiveErrors = 0;
+        const MAX_CONSECUTIVE_ERRORS = 10;
+
         while (!batchDone) {
           await new Promise(resolve => setTimeout(resolve, 3000));
 
           if (stopRequestedRef.current) break;
 
           const statusResponse = await fetch(`/api/jobs/${jobId}/status`);
+
+          if (statusResponse.status === 401) {
+            throw new Error('Session expired. Please log in again and restart processing.');
+          }
+
           const statusData = await statusResponse.json();
 
-          if (!statusData.success) continue;
+          if (!statusData.success) {
+            consecutiveErrors++;
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              throw new Error('Lost connection to server. Please refresh and try again.');
+            }
+            continue;
+          }
+
+          consecutiveErrors = 0;
 
           if (statusData.data.status === 'failed') {
             throw new Error(statusData.data.error || 'Processing failed');
@@ -357,6 +373,11 @@ export function useProcessingFlow() {
 
       // Check if there's any vocabulary to finalize
       const statusCheck = await fetch(`/api/jobs/${jobId}/status`);
+
+      if (statusCheck.status === 401) {
+        throw new Error('Session expired. Please log in again and restart processing.');
+      }
+
       const statusCheckData = await statusCheck.json();
       const vocabCount = statusCheckData.data?.vocabularyCount ?? 0;
 

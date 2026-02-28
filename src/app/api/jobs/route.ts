@@ -3,9 +3,10 @@ import { prisma, withRetry } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 import { uploadToBlob } from '@/lib/storage/blob';
 import { getPdfPageCount } from '@/lib/processing/pdf-converter';
-import { getEpubChapterCount } from '@/lib/processing/epub-extractor';
 import { isImageExtension, validateImageBuffer } from '@/lib/processing/image-validator';
 import { canProcessPages, recordPageUsage } from '@/lib/subscription/usage';
+
+const MAX_PDF_PAGES = 100;
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // 60 seconds for Pro plan
@@ -39,12 +40,11 @@ export async function POST(request: NextRequest) {
     // Validate file type
     const fileName = file.name.toLowerCase();
     const isPdf = fileName.endsWith('.pdf');
-    const isEpub = fileName.endsWith('.epub');
     const isImage = isImageExtension(fileName);
 
-    if (!isPdf && !isEpub && !isImage) {
+    if (!isPdf && !isImage) {
       return NextResponse.json(
-        { success: false, error: 'Only PDF, EPUB, and image files (PNG, JPG, WebP) are supported' },
+        { success: false, error: 'Only PDF and image files (PNG, JPG, WebP) are supported' },
         { status: 400 }
       );
     }
@@ -63,25 +63,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine file type
-    let fileType: 'pdf' | 'epub' | 'image';
-    if (isPdf) fileType = 'pdf';
-    else if (isEpub) fileType = 'epub';
-    else fileType = 'image';
+    const fileType: 'pdf' | 'image' = isPdf ? 'pdf' : 'image';
 
-    // Get page/chapter count (images = 1 page)
+    // Get page count (images = 1 page)
     let totalPages: number;
     try {
       if (fileType === 'pdf') {
         totalPages = await getPdfPageCount(fileBuffer);
-      } else if (fileType === 'epub') {
-        totalPages = await getEpubChapterCount(fileBuffer);
       } else {
-        totalPages = 1; // Single image = 1 page
+        totalPages = 1;
       }
     } catch (error) {
       console.error('Failed to get page count:', error);
       return NextResponse.json(
-        { success: false, error: 'Failed to read file. Make sure it is a valid PDF or EPUB.' },
+        { success: false, error: 'Failed to read file. Make sure it is a valid PDF.' },
+        { status: 400 }
+      );
+    }
+
+    if (fileType === 'pdf' && totalPages > MAX_PDF_PAGES) {
+      return NextResponse.json(
+        { success: false, error: `PDF exceeds the ${MAX_PDF_PAGES}-page limit. Please upload a shorter document.` },
         { status: 400 }
       );
     }

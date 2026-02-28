@@ -63,7 +63,7 @@ export async function GET(
     const format = searchParams.get('format') || 'anki';
 
     // Generate filename
-    const baseName = job.fileName.replace(/\.(pdf|epub)$/i, '');
+    const baseName = job.fileName.replace(/\.pdf$/i, '');
     const csvFileName = `${baseName}_vocabulary.csv`;
 
     if (format === 'excel') {

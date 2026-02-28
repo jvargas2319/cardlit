@@ -15,7 +15,7 @@ export const TIERS = {
     billingPeriod: 'month',
     features: [
       '50 pages per month',
-      'PDF, EPUB & image support',
+      'PDF & image support',
       'Anki & Excel CSV export',
       'Printable flashcards',
     ],

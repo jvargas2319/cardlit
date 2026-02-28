@@ -38,7 +38,7 @@ export default function Home() {
             <span className="gradient-text">any book</span>
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-            Upload a PDF, EPUB, or photo of handwritten notes in any language. Our AI extracts vocabulary and creates flashcards instantly.
+            Upload a PDF or photo of handwritten notes in any language. Our AI extracts vocabulary and creates flashcards instantly.
           </p>
           <div className="pt-6">
             <Link
@@ -58,9 +58,9 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-white">PDF & EPUB Support</h3>
+            <h3 className="text-lg font-semibold text-white">PDF & Image Support</h3>
             <p className="mt-2 text-slate-400 text-sm leading-relaxed">
-              Upload textbooks, novels, or any educational material. We handle both scanned PDFs (with OCR) and EPUBs.
+              Upload textbooks, novels, or any educational material. We handle scanned PDFs with OCR, up to 100 pages.
             </p>
           </div>
 

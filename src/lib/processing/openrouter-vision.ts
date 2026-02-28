@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: Partial<OpenRouterVisionConfig> = {
   // Qwen 2.5 VL 32B vision model on OpenRouter
   // Excellent for OCR and text extraction from images
   model: 'qwen/qwen2.5-vl-32b-instruct',
-  maxRetries: 3,
+  maxRetries: 6,
   retryDelayMs: 2000,
   timeoutMs: 120000,
 };
@@ -187,8 +187,11 @@ export class OpenRouterVisionOCR {
       return data.choices[0]?.message?.content || '';
     } catch (error) {
       if (this.shouldRetry(error, attempt)) {
-        const delay = this.config.retryDelayMs * Math.pow(2, attempt - 1);
-        console.log(`Retrying OpenRouter Vision request (attempt ${attempt + 1}) after ${delay}ms...`);
+        const errorMessage = error instanceof Error ? error.message : '';
+        const isRateLimit = errorMessage.includes('429');
+        const baseDelay = isRateLimit ? 15000 : this.config.retryDelayMs;
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Retrying OpenRouter Vision request (attempt ${attempt + 1}/${this.config.maxRetries}) after ${delay}ms${isRateLimit ? ' (rate limited)' : ''}...`);
         await this.delay(delay);
         return this.makeVisionRequest(imageBuffer, attempt + 1);
       }

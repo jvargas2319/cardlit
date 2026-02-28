@@ -207,7 +207,7 @@ export default function UploadPage() {
           <div>
             <h2 className="text-lg font-medium text-white">Upload your document</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Upload a PDF, EPUB, or image file to extract content for studying.
+              Upload a PDF or image file to extract content for studying.
             </p>
           </div>
 
@@ -471,7 +471,7 @@ export default function UploadPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-indigo-400 mt-0.5">2.</span>
-                <span>Upload a PDF, EPUB, image, or photo of handwritten notes</span>
+                <span>Upload a PDF, image, or photo of handwritten notes</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-indigo-400 mt-0.5">3.</span>
