@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
     }));
     const tier: TierName = subscription?.tier && isValidTier(subscription.tier)
       ? subscription.tier as TierName
-      : 'free';
+      : 'trial';
     const expiresAt = calculateExpirationDate(tier);
 
     // Create the saved export record

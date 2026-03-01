@@ -16,6 +16,9 @@ interface Usage {
   pageLimit: number;
   pagesRemaining: number;
   percentUsed: number;
+  allowedFileTypes: 'images_only' | 'all';
+  maxFilesPerUpload: number;
+  canUploadPdf: boolean;
 }
 
 interface ExportUsage {
@@ -83,7 +86,7 @@ export default function UploadPage() {
           setExportUsage(data.data.usage);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleFileSelect = (file: File) => {
@@ -182,10 +185,9 @@ export default function UploadPage() {
                 {usage.pageLimit !== Infinity && (
                   <div className="w-full bg-slate-800 rounded-full h-2">
                     <div
-                      className={`h-full rounded-full transition-all ${
-                        usage.percentUsed > 90 ? 'bg-red-500' :
-                        usage.percentUsed > 70 ? 'bg-yellow-500' : 'progress-gradient'
-                      }`}
+                      className={`h-full rounded-full transition-all ${usage.percentUsed > 90 ? 'bg-red-500' :
+                          usage.percentUsed > 70 ? 'bg-yellow-500' : 'progress-gradient'
+                        }`}
                       style={{ width: `${Math.min(usage.percentUsed, 100)}%` }}
                     />
                   </div>
@@ -200,6 +202,25 @@ export default function UploadPage() {
                 </a>
               )}
             </div>
+          </div>
+        )}
+
+        {usage && usage.tier === 'trial' && usage.pageLimit === 0 && (
+          <div className="glass-card rounded-xl p-6 mb-6 border border-amber-500/30 bg-amber-500/5 text-center">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              {usage.tierName === 'No Plan' ? 'No Active Plan' : 'Trial Expired'}
+            </h3>
+            <p className="text-sm text-slate-400 mb-4">
+              {usage.tierName === 'No Plan'
+                ? 'Start a trial or subscribe to begin processing documents.'
+                : 'Your 7-day trial has ended. Subscribe to continue processing documents.'}
+            </p>
+            <Link
+              href="/pricing"
+              className="inline-block px-6 py-2.5 text-white font-medium rounded-xl glow-button"
+            >
+              View Plans
+            </Link>
           </div>
         )}
 
@@ -218,11 +239,10 @@ export default function UploadPage() {
                 Extraction Mode
               </label>
               <div className="flex flex-col sm:flex-row gap-3">
-                <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  extractionMode === 'language'
+                <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${extractionMode === 'language'
                     ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]'
                     : 'border-white/10 bg-slate-900/50 hover:border-white/20'
-                }`}>
+                  }`}>
                   <input
                     type="radio"
                     name="extractionMode"
@@ -238,11 +258,10 @@ export default function UploadPage() {
                     </span>
                   </div>
                 </label>
-                <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  extractionMode === 'concept'
+                <label className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${extractionMode === 'concept'
                     ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_-5px_rgba(99,102,241,0.3)]'
                     : 'border-white/10 bg-slate-900/50 hover:border-white/20'
-                }`}>
+                  }`}>
                   <input
                     type="radio"
                     name="extractionMode"
@@ -267,6 +286,8 @@ export default function UploadPage() {
             <FileUpload
               onFileSelect={handleFileSelect}
               disabled={isProcessing}
+              allowPdf={usage?.canUploadPdf ?? true}
+              maxFiles={usage?.maxFilesPerUpload ?? 1}
             />
           )}
 
@@ -375,33 +396,30 @@ export default function UploadPage() {
                         <button
                           onClick={() => handleSaveExport('csv_anki')}
                           disabled={savingExport === 'csv_anki' || savedExports.includes('csv_anki')}
-                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            savedExports.includes('csv_anki')
+                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${savedExports.includes('csv_anki')
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                               : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-white/10'
-                          } disabled:opacity-50`}
+                            } disabled:opacity-50`}
                         >
                           {savingExport === 'csv_anki' ? 'Saving...' : savedExports.includes('csv_anki') ? 'Anki CSV Saved' : 'Save Anki CSV'}
                         </button>
                         <button
                           onClick={() => handleSaveExport('csv_excel')}
                           disabled={savingExport === 'csv_excel' || savedExports.includes('csv_excel')}
-                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            savedExports.includes('csv_excel')
+                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${savedExports.includes('csv_excel')
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                               : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-white/10'
-                          } disabled:opacity-50`}
+                            } disabled:opacity-50`}
                         >
                           {savingExport === 'csv_excel' ? 'Saving...' : savedExports.includes('csv_excel') ? 'Excel CSV Saved' : 'Save Excel CSV'}
                         </button>
                         <button
                           onClick={() => handleSaveExport('flashcards_pdf')}
                           disabled={savingExport === 'flashcards_pdf' || savedExports.includes('flashcards_pdf')}
-                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            savedExports.includes('flashcards_pdf')
+                          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${savedExports.includes('flashcards_pdf')
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                               : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-white/10'
-                          } disabled:opacity-50`}
+                            } disabled:opacity-50`}
                         >
                           {savingExport === 'flashcards_pdf' ? 'Saving...' : savedExports.includes('flashcards_pdf') ? 'Flashcards Saved' : 'Save Flashcards'}
                         </button>

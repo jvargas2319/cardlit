@@ -34,7 +34,7 @@ export default function PricingPage() {
       return;
     }
 
-    if (tier === 'free' || tier === currentTier) {
+    if (tier === currentTier) {
       return;
     }
 
@@ -80,7 +80,7 @@ export default function PricingPage() {
   };
 
   const tiers = [
-    { id: 'free' as TierName, ...TIERS.free, popular: false },
+    { id: 'trial' as TierName, ...TIERS.trial, popular: false },
     { id: 'basic' as TierName, ...TIERS.basic, popular: false },
     { id: 'pro' as TierName, ...TIERS.pro, popular: true },
     { id: 'unlimited' as TierName, ...TIERS.unlimited, popular: false },
@@ -209,28 +209,19 @@ export default function PricingPage() {
                   ))}
                 </ul>
 
-                {tier.id === 'free' ? (
-                  isCurrent ? (
-                    <button
-                      disabled
-                      className="w-full py-3 px-4 text-slate-400 font-medium rounded-xl border border-white/10 cursor-not-allowed"
-                    >
-                      Current Plan
-                    </button>
-                  ) : (
-                    <Link
-                      href="/register"
-                      className="w-full py-3 px-4 text-center text-white font-medium rounded-xl border border-white/20 hover:border-white/40 transition-colors block"
-                    >
-                      Get Started Free
-                    </Link>
-                  )
-                ) : isCurrent ? (
+                {isCurrent && tier.id !== 'trial' ? (
                   <button
                     onClick={handleManageSubscription}
                     className="w-full py-3 px-4 text-white font-medium rounded-xl border border-indigo-500/50 hover:border-indigo-500 transition-colors"
                   >
                     Manage Subscription
+                  </button>
+                ) : isCurrent && tier.id === 'trial' ? (
+                  <button
+                    disabled
+                    className="w-full py-3 px-4 text-slate-400 font-medium rounded-xl border border-white/10 cursor-not-allowed"
+                  >
+                    Current Plan
                   </button>
                 ) : (
                   <button
@@ -242,7 +233,7 @@ export default function PricingPage() {
                         : 'bg-indigo-600 hover:bg-indigo-500'
                     } ${loading === tier.id ? 'opacity-50 cursor-wait' : ''}`}
                   >
-                    {loading === tier.id ? 'Loading...' : `Upgrade to ${tier.name}`}
+                    {loading === tier.id ? 'Loading...' : tier.id === 'trial' ? 'Start Trial - $2' : `Upgrade to ${tier.name}`}
                   </button>
                 )}
               </div>

@@ -21,7 +21,7 @@ model Subscription {
   id                   String    @id @default(cuid())
   userId               String    @unique
   user                 User      @relation(fields: [userId], references: [id])
-  tier                 String    @default("free") // free, basic, pro, unlimited
+  tier                 String    @default("trial") // trial, basic, pro, unlimited
   stripeCustomerId     String?   @unique
   stripeSubId          String?   @unique
   status               String    @default("active") // active, canceled, past_due

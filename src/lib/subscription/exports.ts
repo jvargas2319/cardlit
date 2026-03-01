@@ -25,7 +25,7 @@ export async function getExportUsage(userId: string): Promise<ExportUsageResult>
 
   const tier: TierName = subscription?.tier && isValidTier(subscription.tier)
     ? subscription.tier as TierName
-    : 'free';
+    : 'trial';
 
   const exportLimit = getExportLimit(tier);
   const exportsUsed = subscription?.exportsUsedThisPeriod || 0;
@@ -86,7 +86,7 @@ export async function recordExportSaved(userId: string): Promise<void> {
     },
     create: {
       userId,
-      tier: 'free',
+      tier: 'trial',
       exportsUsedThisPeriod: 1,
     },
   }));

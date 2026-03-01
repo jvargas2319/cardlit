@@ -194,7 +194,7 @@ export default function ExportsPage() {
                   </div>
                 )}
               </div>
-              {!usage.canSave && usage.tier === 'free' && (
+              {!usage.canSave && usage.tier === 'trial' && (
                 <Link
                   href="/pricing"
                   className="ml-4 text-sm text-indigo-400 hover:text-indigo-300 font-medium transition-colors"

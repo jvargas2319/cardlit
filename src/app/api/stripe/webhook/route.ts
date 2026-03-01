@@ -78,12 +78,44 @@ export async function POST(request: NextRequest) {
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId;
   const customerId = session.customer as string;
-  const subscriptionId = session.subscription as string;
 
   if (!userId) {
     console.error('No userId in checkout session metadata');
     return;
   }
+
+  // One-time payment (trial) vs subscription
+  if (session.mode === 'payment') {
+    const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await withRetry(() => prisma.subscription.upsert({
+      where: { userId },
+      update: {
+        tier: 'trial',
+        stripeCustomerId: customerId,
+        status: 'active',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: trialEnd,
+        pagesUsedThisPeriod: 0,
+        exportsUsedThisPeriod: 0,
+      },
+      create: {
+        userId,
+        tier: 'trial',
+        stripeCustomerId: customerId,
+        status: 'active',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: trialEnd,
+        pagesUsedThisPeriod: 0,
+        exportsUsedThisPeriod: 0,
+      },
+    }));
+
+    console.log(`Trial activated for user ${userId} (expires ${trialEnd.toISOString()})`);
+    return;
+  }
+
+  const subscriptionId = session.subscription as string;
 
   // Get subscription details to determine tier
   const stripe = (await import('@/lib/stripe')).stripe;
@@ -91,14 +123,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const priceId = subscription.items.data[0]?.price.id;
   const tier = priceId ? getTierFromPriceId(priceId) : 'basic';
 
-  // Calculate period end - cast to any to handle Stripe SDK version differences
   const subData = subscription as unknown as { current_period_end?: number; currentPeriodEnd?: number };
   const periodEndTimestamp = subData.current_period_end || subData.currentPeriodEnd;
   const periodEnd = periodEndTimestamp
     ? new Date(periodEndTimestamp * 1000)
     : null;
 
-  // Upsert subscription record
   await withRetry(() => prisma.subscription.upsert({
     where: { userId },
     update: {
@@ -187,11 +217,10 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     return;
   }
 
-  // Downgrade to free tier
   await withRetry(() => prisma.subscription.update({
     where: { userId: existingSub.userId },
     data: {
-      tier: 'free',
+      tier: 'trial',
       status: 'canceled',
       stripeSubId: null,
     },

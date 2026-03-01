@@ -4,18 +4,20 @@
  */
 
 export const TIERS = {
-  free: {
-    name: 'Free',
-    pageLimit: 50,
+  trial: {
+    name: 'Trial',
+    pageLimit: 10,
     exportLimit: 0,
     exportStorageDays: 0,
-    price: 0,
-    priceId: null,
-    description: 'Perfect for trying out the service',
-    billingPeriod: 'month',
+    allowedFileTypes: 'images_only' as const,
+    maxFilesPerUpload: 3,
+    price: 2,
+    priceId: process.env.STRIPE_PRICE_TRIAL || null,
+    description: 'Try it out for 7 days',
+    billingPeriod: '7 days',
     features: [
-      '50 pages per month',
-      'PDF & image support',
+      '10 pages',
+      'Up to 3 images per upload',
       'Anki & Excel CSV export',
       'Printable flashcards',
     ],
@@ -25,13 +27,16 @@ export const TIERS = {
     pageLimit: 50,
     exportLimit: 5,
     exportStorageDays: 30,
+    allowedFileTypes: 'images_only' as const,
+    maxFilesPerUpload: 3,
     price: 9,
     priceId: process.env.STRIPE_PRICE_BASIC || null,
     description: 'Great for students',
     billingPeriod: 'month',
     features: [
       '50 pages per month',
-      'Everything in Free',
+      'Images & screenshots only',
+      'Up to 3 images per upload',
       'Save 5 exports per month',
       '30-day export storage',
     ],
@@ -41,13 +46,16 @@ export const TIERS = {
     pageLimit: 500,
     exportLimit: 30,
     exportStorageDays: 90,
+    allowedFileTypes: 'all' as const,
+    maxFilesPerUpload: 10,
     price: 19,
     priceId: process.env.STRIPE_PRICE_PRO || null,
     description: 'For power users',
     billingPeriod: 'month',
     features: [
       '500 pages per month',
-      'Everything in Basic',
+      'PDF & image support',
+      'Up to 10 files per upload',
       'Save 30 exports per month',
       '90-day export storage',
       'Priority processing',
@@ -58,13 +66,16 @@ export const TIERS = {
     pageLimit: Infinity,
     exportLimit: Infinity,
     exportStorageDays: Infinity,
+    allowedFileTypes: 'all' as const,
+    maxFilesPerUpload: 20,
     price: 59,
     priceId: process.env.STRIPE_PRICE_UNLIMITED || null,
     description: 'No limits, no worries',
     billingPeriod: 'year',
     features: [
       'Unlimited pages',
-      'Everything in Pro',
+      'PDF & image support',
+      'Up to 20 files per upload',
       'Unlimited saved exports',
       'Exports never expire',
       'Priority processing',
@@ -104,6 +115,18 @@ export function isValidTier(tier: string): tier is TierName {
 
 export function canSaveExports(tier: TierName): boolean {
   return TIERS[tier].exportLimit > 0;
+}
+
+export function getAllowedFileTypes(tier: TierName): 'images_only' | 'all' {
+  return TIERS[tier].allowedFileTypes;
+}
+
+export function getMaxFilesPerUpload(tier: TierName): number {
+  return TIERS[tier].maxFilesPerUpload;
+}
+
+export function canUploadPdf(tier: TierName): boolean {
+  return TIERS[tier].allowedFileTypes === 'all';
 }
 
 export function getAllTiers() {

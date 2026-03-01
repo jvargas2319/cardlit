@@ -4,7 +4,7 @@
  */
 
 import { prisma, withRetry } from '@/lib/db';
-import { getTierLimit, type TierName, isValidTier } from './tiers';
+import { getTierLimit, getAllowedFileTypes, getMaxFilesPerUpload, canUploadPdf as tierCanUploadPdf, type TierName, isValidTier } from './tiers';
 
 export interface Usage {
   tier: TierName;
@@ -14,6 +14,9 @@ export interface Usage {
   pagesRemaining: number;
   percentUsed: number;
   periodEnd?: Date;
+  allowedFileTypes: 'images_only' | 'all';
+  maxFilesPerUpload: number;
+  canUploadPdf: boolean;
 }
 
 export interface LimitCheck {
@@ -34,18 +37,37 @@ export async function getUserUsage(userId: string): Promise<Usage> {
   }));
 
   if (!sub) {
-    // User has no subscription - they're on free tier
     return {
-      tier: 'free',
-      tierName: 'Free',
+      tier: 'trial',
+      tierName: 'No Plan',
       pagesUsed: 0,
-      pageLimit: 50,
-      pagesRemaining: 50,
+      pageLimit: 0,
+      pagesRemaining: 0,
       percentUsed: 0,
+      allowedFileTypes: getAllowedFileTypes('trial'),
+      maxFilesPerUpload: getMaxFilesPerUpload('trial'),
+      canUploadPdf: tierCanUploadPdf('trial'),
     };
   }
 
-  const tier = isValidTier(sub.tier) ? sub.tier : 'free';
+  const tier = isValidTier(sub.tier) ? sub.tier : 'trial';
+
+  // Check if trial has expired
+  if (tier === 'trial' && sub.currentPeriodEnd && new Date() > sub.currentPeriodEnd) {
+    return {
+      tier: 'trial',
+      tierName: 'Trial (Expired)',
+      pagesUsed: sub.pagesUsedThisPeriod,
+      pageLimit: 0,
+      pagesRemaining: 0,
+      percentUsed: 100,
+      periodEnd: sub.currentPeriodEnd,
+      allowedFileTypes: getAllowedFileTypes('trial'),
+      maxFilesPerUpload: getMaxFilesPerUpload('trial'),
+      canUploadPdf: tierCanUploadPdf('trial'),
+    };
+  }
+
   const pageLimit = getTierLimit(tier);
   const pagesUsed = sub.pagesUsedThisPeriod;
   const pagesRemaining = pageLimit === Infinity ? Infinity : Math.max(0, pageLimit - pagesUsed);
@@ -59,6 +81,9 @@ export async function getUserUsage(userId: string): Promise<Usage> {
     pagesRemaining,
     percentUsed,
     periodEnd: sub.currentPeriodEnd ?? undefined,
+    allowedFileTypes: getAllowedFileTypes(tier),
+    maxFilesPerUpload: getMaxFilesPerUpload(tier),
+    canUploadPdf: tierCanUploadPdf(tier),
   };
 }
 
@@ -73,7 +98,11 @@ export async function canProcessPages(userId: string, pageCount: number): Promis
 
   let message: string | undefined;
   if (!allowed) {
-    message = `Your ${usage.tierName} plan has ${remaining} pages remaining this month. This document has ${pageCount} pages.`;
+    if (usage.tier === 'trial' && usage.pageLimit === 0) {
+      message = 'Your trial has expired. Please upgrade to continue processing files.';
+    } else {
+      message = `Your ${usage.tierName} plan has ${remaining} pages remaining. This document has ${pageCount} pages.`;
+    }
   }
 
   return {
@@ -100,7 +129,7 @@ export async function recordPageUsage(userId: string, pageCount: number): Promis
     },
     create: {
       userId,
-      tier: 'free',
+      tier: 'trial',
       pagesUsedThisPeriod: pageCount,
     },
   }));

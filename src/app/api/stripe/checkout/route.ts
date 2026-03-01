@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { tier } = body as { tier: string };
 
     // Validate tier
-    if (!tier || !isValidTier(tier) || tier === 'free') {
+    if (!tier || !isValidTier(tier)) {
       return NextResponse.json(
         { success: false, error: 'Invalid tier' },
         { status: 400 }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const successUrl = `${baseUrl}/upload?subscription=success`;
     const cancelUrl = `${baseUrl}/pricing?subscription=canceled`;
 
-    // Create checkout session
+    // Create checkout session (trial uses one-time payment mode)
     const session = await createCheckoutSession({
       userId: user.id,
       userEmail: user.email,
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       successUrl,
       cancelUrl,
       customerId: user.subscription?.stripeCustomerId || undefined,
+      isOneTime: tier === 'trial',
     });
 
     return NextResponse.json({

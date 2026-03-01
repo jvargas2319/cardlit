@@ -8,7 +8,8 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 });
 
 // Price IDs for each tier (set in environment variables)
-export const PRICE_IDS: Record<Exclude<TierName, 'free'>, string | undefined> = {
+export const PRICE_IDS: Record<TierName, string | undefined> = {
+  trial: process.env.STRIPE_PRICE_TRIAL,
   basic: process.env.STRIPE_PRICE_BASIC,
   pro: process.env.STRIPE_PRICE_PRO,
   unlimited: process.env.STRIPE_PRICE_UNLIMITED,
@@ -26,11 +27,10 @@ export function getTierFromPriceId(priceId: string): TierName | null {
 
 // Get price ID for a tier
 export function getPriceIdForTier(tier: TierName): string | null {
-  if (tier === 'free') return null;
   return PRICE_IDS[tier] || null;
 }
 
-// Create a checkout session for subscription
+// Create a checkout session for subscription or one-time payment
 export async function createCheckoutSession({
   userId,
   userEmail,
@@ -38,6 +38,7 @@ export async function createCheckoutSession({
   successUrl,
   cancelUrl,
   customerId,
+  isOneTime = false,
 }: {
   userId: string;
   userEmail: string;
@@ -45,9 +46,10 @@ export async function createCheckoutSession({
   successUrl: string;
   cancelUrl: string;
   customerId?: string;
+  isOneTime?: boolean;
 }): Promise<Stripe.Checkout.Session> {
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
-    mode: 'subscription',
+    mode: isOneTime ? 'payment' : 'subscription',
     payment_method_types: ['card'],
     line_items: [
       {
@@ -60,14 +62,16 @@ export async function createCheckoutSession({
     metadata: {
       userId,
     },
-    subscription_data: {
+  };
+
+  if (!isOneTime) {
+    sessionParams.subscription_data = {
       metadata: {
         userId,
       },
-    },
-  };
+    };
+  }
 
-  // If customer already exists, use their ID; otherwise create new customer
   if (customerId) {
     sessionParams.customer = customerId;
   } else {
@@ -150,7 +154,7 @@ export function mapSubscriptionStatusToTier(
   }
 
   return {
-    tier: tier || 'free',
+    tier: tier || 'trial',
     status,
   };
 }

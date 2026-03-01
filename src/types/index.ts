@@ -163,7 +163,7 @@ export interface ExportUsage {
 }
 
 // Subscription types
-export type SubscriptionTier = 'free' | 'basic' | 'pro' | 'unlimited';
+export type SubscriptionTier = 'trial' | 'basic' | 'pro' | 'unlimited';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due';
 
 export interface SubscriptionInfo {

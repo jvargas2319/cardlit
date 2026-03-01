@@ -4,18 +4,66 @@ import { useState, useCallback, useRef } from 'react';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
+  onMultiFileSelect?: (files: File[]) => void;
   disabled?: boolean;
-  accept?: string;
+  allowPdf?: boolean;
+  maxFiles?: number;
 }
 
 export function FileUpload({
   onFileSelect,
+  onMultiFileSelect,
   disabled = false,
-  accept = '.pdf,.png,.jpg,.jpeg,.webp'
+  allowPdf = true,
+  maxFiles = 1,
 }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const accept = allowPdf
+    ? '.pdf,.png,.jpg,.jpeg,.webp'
+    : '.png,.jpg,.jpeg,.webp';
+
+  const validExtensions = allowPdf
+    ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp']
+    : ['.png', '.jpg', '.jpeg', '.webp'];
+
+  const validateAndSetFiles = useCallback((incomingFiles: File[]) => {
+    setError(null);
+
+    // Filter to valid extensions
+    const validFiles: File[] = [];
+    for (const file of incomingFiles) {
+      const name = file.name.toLowerCase();
+      const isValid = validExtensions.some(ext => name.endsWith(ext));
+      if (!isValid) {
+        const typeMsg = allowPdf
+          ? 'Only PDF and image files (PNG, JPG, WebP) are supported.'
+          : 'Only image files (PNG, JPG, WebP) are supported. PDFs require a Pro plan or higher.';
+        setError(typeMsg);
+        return;
+      }
+      validFiles.push(file);
+    }
+
+    // Check max files
+    if (validFiles.length > maxFiles) {
+      setError(`You can upload up to ${maxFiles} file${maxFiles > 1 ? 's' : ''} at a time.`);
+      return;
+    }
+
+    setSelectedFiles(validFiles);
+
+    // Notify parent
+    if (validFiles.length === 1) {
+      onFileSelect(validFiles[0]);
+    }
+    if (onMultiFileSelect && validFiles.length >= 1) {
+      onMultiFileSelect(validFiles);
+    }
+  }, [validExtensions, allowPdf, maxFiles, onFileSelect, onMultiFileSelect]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -35,33 +83,40 @@ export function FileUpload({
 
     if (disabled) return;
 
-    const files = e.dataTransfer.files;
+    const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      const file = files[0];
-      const fileName = file.name.toLowerCase();
-      const validExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
-      const isValid = validExtensions.some(ext => fileName.endsWith(ext));
-
-      if (isValid) {
-        setSelectedFile(file);
-        onFileSelect(file);
-      } else {
-        alert('Please select a PDF or image file (PNG, JPG, WebP)');
-      }
+      validateAndSetFiles(files);
     }
-  }, [disabled, onFileSelect]);
+  }, [disabled, validateAndSetFiles]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setSelectedFile(files[0]);
-      onFileSelect(files[0]);
+      validateAndSetFiles(Array.from(files));
     }
-  }, [onFileSelect]);
+  }, [validateAndSetFiles]);
 
   const handleClick = () => {
     if (!disabled && fileInputRef.current) {
       fileInputRef.current.click();
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const updated = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(updated);
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    // Notify parent of change
+    if (updated.length === 0) {
+      onFileSelect(null as unknown as File); // Signal no file selected
+    } else if (updated.length === 1) {
+      onFileSelect(updated[0]);
+    }
+    if (onMultiFileSelect) {
+      onMultiFileSelect(updated);
     }
   };
 
@@ -70,6 +125,10 @@ export function FileUpload({
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const helperText = allowPdf
+    ? `PDF or images including handwritten notes (max ${maxFiles} file${maxFiles > 1 ? 's' : ''}, 100 pages)`
+    : `Images only — screenshots & handwritten notes (max ${maxFiles} file${maxFiles > 1 ? 's' : ''})`;
 
   return (
     <div className="w-full">
@@ -92,6 +151,7 @@ export function FileUpload({
           ref={fileInputRef}
           type="file"
           accept={accept}
+          multiple={maxFiles > 1}
           onChange={handleFileChange}
           disabled={disabled}
           className="hidden"
@@ -120,50 +180,64 @@ export function FileUpload({
             </span>
             {' '}or drag and drop
           </div>
-          <p className="text-xs text-slate-500">PDF or images including handwritten notes (max 100 pages)</p>
+          <p className="text-xs text-slate-500">{helperText}</p>
           <p className="text-xs text-purple-400/80 mt-1">Supports 100+ languages - clear handwriting works best</p>
         </div>
       </div>
 
-      {selectedFile && (
-        <div className="mt-4 p-4 glass-card rounded-xl flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-              <svg
-                className="h-5 w-5 text-indigo-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+      {/* Error message */}
+      {error && (
+        <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Selected files list */}
+      {selectedFiles.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {selectedFiles.map((file, index) => (
+            <div key={`${file.name}-${index}`} className="p-4 glass-card rounded-xl flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                  <svg
+                    className="h-5 w-5 text-indigo-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{file.name}</p>
+                  <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeFile(index);
+                }}
+                disabled={disabled}
+                className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div>
-              <p className="text-sm font-medium text-white">{selectedFile.name}</p>
-              <p className="text-xs text-slate-500">{formatFileSize(selectedFile.size)}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedFile(null);
-              if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-              }
-            }}
-            disabled={disabled}
-            className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          ))}
+          {selectedFiles.length > 1 && (
+            <p className="text-xs text-slate-500 text-right">
+              {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+            </p>
+          )}
         </div>
       )}
     </div>

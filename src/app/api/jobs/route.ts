@@ -4,7 +4,7 @@ import { getAuthUser } from '@/lib/auth';
 import { uploadToBlob } from '@/lib/storage/blob';
 import { getPdfPageCount } from '@/lib/processing/pdf-converter';
 import { isImageExtension, validateImageBuffer } from '@/lib/processing/image-validator';
-import { canProcessPages, recordPageUsage } from '@/lib/subscription/usage';
+import { canProcessPages, recordPageUsage, getUserUsage } from '@/lib/subscription/usage';
 
 const MAX_PDF_PAGES = 100;
 
@@ -22,20 +22,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get user's current tier restrictions
+    const usage = await getUserUsage(userId);
+
     // Get form data
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const files = formData.getAll('file') as File[];
     const mode = (formData.get('mode') as string) || 'language';
 
     // Validate mode
     const extractionMode = mode === 'concept' ? 'concept' : 'language';
 
-    if (!file) {
+    if (!files || files.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No file provided' },
         { status: 400 }
       );
     }
+
+    // Check max files per upload for this tier
+    if (files.length > usage.maxFilesPerUpload) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Your ${usage.tierName} plan allows up to ${usage.maxFilesPerUpload} files per upload. You selected ${files.length}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Use the first file (current UI sends one at a time, multi-file coming soon)
+    const file = files[0];
 
     // Validate file type
     const fileName = file.name.toLowerCase();
@@ -46,6 +63,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Only PDF and image files (PNG, JPG, WebP) are supported' },
         { status: 400 }
+      );
+    }
+
+    // Check if PDFs are allowed for this tier
+    if (isPdf && !usage.canUploadPdf) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `PDF uploads are not available on the ${usage.tierName} plan. Please upgrade to Pro or higher, or upload images instead.`,
+        },
+        { status: 403 }
       );
     }
 
